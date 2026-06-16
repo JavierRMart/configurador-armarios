@@ -316,7 +316,7 @@ export default function Home() {
                 <div style={{ marginBottom: '15px', borderTop: '1px solid #d9cdb8', paddingTop: '10px' }}>
                   <CabinetEditor 
                     armario={armario}
-                    onChange={(updated) => {
+                    onChange={(updated: any) => {
                       setArmarios(armarios.map(a => a.id === updated.id ? updated : a));
                     }}
                   />
