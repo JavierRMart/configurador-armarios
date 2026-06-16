@@ -73,7 +73,7 @@ export default function CabinetEditor({ armario, onChange }: any) {
         <label style={{ fontSize: '11px', fontWeight: 'bold', display: 'block', marginBottom: '8px', textTransform: 'uppercase', color: '#6b5d4f' }}>
           Ancho de puertas (cm)
         </label>
-        {armario.doors.map((door, i) => (
+        {armario.doors.map((door: any, i: number) => (
           <div key={i} style={{ marginBottom: '6px', display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#6b5d4f', minWidth: '30px' }}>Puerta {i + 1}</span>
             <input
