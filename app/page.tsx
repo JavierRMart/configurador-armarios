@@ -1,18 +1,42 @@
 'use client';
 
 import React, { useState } from 'react';
-import TechnicalViews from './TechnicalViews';
 import ExportPDF from './ExportPDF';
+import CabinetSVG from './CabinetSVG';
+import CabinetEditor from './CabinetEditor';
 
 export default function Home() {
-  const [cliente, setCliente] = useState('Mi Cliente');
+  const [projectData, setProjectData] = useState({
+    clientName: 'Mi Cliente',
+    address: 'Dirección',
+    budget: 0,
+    date: new Date().toISOString().split('T')[0],
+  });
+
   const [armarios, setArmarios] = useState([
     {
       id: 1,
       ubicacion: 'Habitación 1',
+      name: '',
+      type: 'abatible',
+      doors: [{ width: 50 }, { width: 50 }],
       ancho: 100,
       alto: 240,
       profundidad: 35,
+      interior: {
+        barraColgar: true,
+        baldas: false,
+        cremallera: false,
+        cajones: 0,
+        cajonHeight: 16,
+      },
+      finishes: {
+        interiorTextil: 'Cactus',
+        doorStyle: 'lisa',
+        handle: 'Latón mate',
+        costadosVistos: false,
+      },
+      notes: ''
     }
   ]);
 
@@ -20,9 +44,26 @@ export default function Home() {
     const nuevoArmario = {
       id: Date.now(),
       ubicacion: 'Habitación',
+      name: '',
+      type: 'abatible',
+      doors: [{ width: 50 }, { width: 50 }],
       ancho: 100,
       alto: 240,
       profundidad: 35,
+      interior: {
+        barraColgar: true,
+        baldas: false,
+        cremallera: false,
+        cajones: 0,
+        cajonHeight: 16,
+      },
+      finishes: {
+        interiorTextil: 'Cactus',
+        doorStyle: 'lisa',
+        handle: 'Latón mate',
+        costadosVistos: false,
+      },
+      notes: ''
     };
     setArmarios([...armarios, nuevoArmario]);
   };
@@ -33,9 +74,15 @@ export default function Home() {
 
   const actualizarArmario = (id: number, campo: string, valor: any) => {
     setArmarios(
-      armarios.map(a =>
-        a.id === id ? { ...a, [campo]: Number(valor) } : a
-      )
+      armarios.map(a => {
+        if (a.id === id) {
+          if (campo === 'ancho' || campo === 'alto' || campo === 'profundidad') {
+            return { ...a, [campo]: Number(valor) };
+          }
+          return { ...a, [campo]: valor };
+        }
+        return a;
+      })
     );
   };
 
@@ -58,22 +105,89 @@ export default function Home() {
           marginBottom: '30px',
           border: '1px solid #d9cdb8',
         }}>
-          <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
-            CLIENTE
-          </label>
-          <input
-            type="text"
-            value={cliente}
-            onChange={(e) => setCliente(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px',
-              fontSize: '16px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-              boxSizing: 'border-box',
-            }}
-          />
+          <h2 style={{ color: '#1a1612', margin: '0 0 15px 0', fontSize: '16px' }}>Datos del Proyecto</h2>
+          
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '15px',
+          }}>
+            <div>
+              <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+                CLIENTE
+              </label>
+              <input
+                type="text"
+                value={projectData.clientName}
+                onChange={(e) => setProjectData({...projectData, clientName: e.target.value})}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  fontSize: '14px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+                DIRECCIÓN
+              </label>
+              <input
+                type="text"
+                value={projectData.address}
+                onChange={(e) => setProjectData({...projectData, address: e.target.value})}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  fontSize: '14px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+                PRESUPUESTO (€)
+              </label>
+              <input
+                type="number"
+                value={projectData.budget}
+                onChange={(e) => setProjectData({...projectData, budget: Number(e.target.value)})}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  fontSize: '14px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+                FECHA
+              </label>
+              <input
+                type="date"
+                value={projectData.date}
+                onChange={(e) => setProjectData({...projectData, date: e.target.value})}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  fontSize: '14px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </div>
         </div>
 
         <div style={{ marginBottom: '20px' }}>
@@ -195,11 +309,18 @@ export default function Home() {
                   </div>
                 </div>
 
-                <TechnicalViews 
-                  ancho={armario.ancho} 
-                  alto={armario.alto} 
-                  profundidad={armario.profundidad} 
-                />
+                <div style={{ marginBottom: '15px', padding: '10px', background: '#faf7f2', borderRadius: '4px' }}>
+                  <CabinetSVG armario={armario} />
+                </div>
+
+                <div style={{ marginBottom: '15px', borderTop: '1px solid #d9cdb8', paddingTop: '10px' }}>
+                  <CabinetEditor 
+                    armario={armario}
+                    onChange={(updated) => {
+                      setArmarios(armarios.map(a => a.id === updated.id ? updated : a));
+                    }}
+                  />
+                </div>
 
                 <p style={{
                   margin: '10px 0 15px 0',
@@ -231,7 +352,7 @@ export default function Home() {
           </div>
         </div>
 
-        <ExportPDF cliente={cliente} armarios={armarios} />
+        <ExportPDF projectData={projectData} armarios={armarios} />
       </div>
     </div>
   );
