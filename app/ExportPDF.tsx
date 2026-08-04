@@ -4,14 +4,16 @@ import React, { useState } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-export default function ExportPDF({ projectData, armarios }: any) {
+export default function ExportPDF({ projectData, armarios, puertas }: any) {
   const [loading, setLoading] = useState(false);
 
   const exportarPDF = async () => {
     setLoading(true);
     try {
       const doc = new jsPDF('p', 'mm', 'a4');
+      let primeraPagina = true;
 
+      // ============ ARMARIOS ============
       for (let i = 0; i < armarios.length; i++) {
         const armario = armarios[i];
 
@@ -170,13 +172,90 @@ export default function ExportPDF({ projectData, armarios }: any) {
         });
         document.body.removeChild(container);
 
-        if (i > 0) doc.addPage();
+        if (!primeraPagina) doc.addPage();
+        primeraPagina = false;
+        const imgData = canvas.toDataURL('image/png');
+        doc.addImage(imgData, 'PNG', 0, 0, 210, 297);
+      }
+
+      // ============ PUERTAS (TABLA) ============
+      if (puertas.length > 0) {
+        if (!primeraPagina) doc.addPage();
+        primeraPagina = false;
+
+        const container = document.createElement('div');
+        container.style.width = '210mm';
+        container.style.padding = '12mm';
+        container.style.fontFamily = 'Arial, sans-serif';
+        container.style.backgroundColor = 'white';
+        container.style.boxSizing = 'border-box';
+
+        container.innerHTML = `
+          <!-- HEADER -->
+          <div style="background: linear-gradient(135deg, #2D2823 0%, #1a1612 100%); color: white; padding: 8mm; border-radius: 3mm; margin-bottom: 8mm;">
+            <h1 style="margin: 0 0 2mm 0; font-size: 20px; font-weight: bold;">
+              ${projectData.clientName}
+            </h1>
+            <div style="font-size: 9px; opacity: 0.9; line-height: 1.5;">
+              📍 ${projectData.address} | 💰 ${projectData.budget}€ | 📅 ${projectData.date}
+            </div>
+          </div>
+
+          <!-- TITULO -->
+          <h2 style="margin: 0 0 10mm 0; font-size: 16px; font-weight: bold; color: #1a1612;">
+            MEDICIÓN DE PUERTAS
+          </h2>
+
+          <!-- TABLA PUERTAS -->
+          <table style="width: 100%; border-collapse: collapse; font-size: 9px; margin-bottom: 10mm;">
+            <thead>
+              <tr style="background: #B08D57; color: white;">
+                <th style="border: 1px solid #2D2823; padding: 4mm; text-align: left; font-weight: bold;">Ud.</th>
+                <th style="border: 1px solid #2D2823; padding: 4mm; text-align: left; font-weight: bold;">Ubicación</th>
+                <th style="border: 1px solid #2D2823; padding: 4mm; text-align: left; font-weight: bold;">Tipo</th>
+                <th style="border: 1px solid #2D2823; padding: 4mm; text-align: left; font-weight: bold;">Subtipo</th>
+                <th style="border: 1px solid #2D2823; padding: 4mm; text-align: center; font-weight: bold;">Alto (mm)</th>
+                <th style="border: 1px solid #2D2823; padding: 4mm; text-align: center; font-weight: bold;">Ancho (mm)</th>
+                <th style="border: 1px solid #2D2823; padding: 4mm; text-align: center; font-weight: bold;">Cerco (mm)</th>
+                <th style="border: 1px solid #2D2823; padding: 4mm; text-align: left; font-weight: bold;">Apertura</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${puertas.map((p, idx) => `
+                <tr style="background: ${idx % 2 === 0 ? '#faf7f2' : 'white'}; border-bottom: 1px solid #d9cdb8;">
+                  <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.unidades}</td>
+                  <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.ubicacion}</td>
+                  <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.tipo}</td>
+                  <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.subtipo}</td>
+                  <td style="border: 1px solid #d9cdb8; padding: 3mm; text-align: center;">${p.alto}</td>
+                  <td style="border: 1px solid #d9cdb8; padding: 3mm; text-align: center;">${p.ancho}</td>
+                  <td style="border: 1px solid #d9cdb8; padding: 3mm; text-align: center;">${p.anchoCerco}</td>
+                  <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.apertura === 'derecha' ? 'A derechas' : 'A izquierdas'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <!-- FOOTER -->
+          <div style="border-top: 2px solid #1a1612; padding-top: 8mm; font-size: 8px; color: #666; text-align: center;">
+            <strong>LVMeritus</strong> | ${projectData.date} | Documento generado automáticamente
+          </div>
+        `;
+
+        document.body.appendChild(container);
+        const canvas = await html2canvas(container, {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          windowHeight: 1400,
+        });
+        document.body.removeChild(container);
+
         const imgData = canvas.toDataURL('image/png');
         doc.addImage(imgData, 'PNG', 0, 0, 210, 297);
       }
 
       doc.save(`planos-${projectData.clientName}-${projectData.date}.pdf`);
-      alert(`✅ PDF generado: ${armarios.length} página(s)`);
+      alert(`✅ PDF generado: ${armarios.length} armario(s) + ${puertas.length} puerta(s)`);
     } catch (error) {
       console.error('Error:', error);
       alert('❌ Error al generar PDF');
@@ -207,7 +286,7 @@ export default function ExportPDF({ projectData, armarios }: any) {
   );
 }
 
-// ============ FUNCIONES SVG ============
+// ============ FUNCIONES SVG ARMARIOS ============
 
 function CabinetSVGAlzado(armario: any) {
   const ancho = Math.round(armario.ancho * 10);
@@ -218,35 +297,29 @@ function CabinetSVGAlzado(armario: any) {
 
   let svg = `<svg viewBox="0 0 ${w + 60} ${h + 80}" style="width: 100%; max-height: 150px;">`;
   
-  // Cuerpo
   svg += `<rect x="30" y="25" width="${w}" height="${h}" fill="#FAF7F2" stroke="#2D2823" stroke-width="2" />`;
   
-  // Barra colgante
   if (armario.interior.barraColgar) {
     svg += `<line x1="35" y1="${25 + h * 0.18}" x2="${w + 25}" y2="${25 + h * 0.18}" stroke="#B08D57" stroke-width="2" />`;
   }
   
-  // Baldas
   if (armario.interior.baldas) {
     [0.4, 0.6, 0.8].forEach(pos => {
       svg += `<line x1="33" y1="${25 + h * pos}" x2="${w + 27}" y2="${25 + h * pos}" stroke="#6B5D4F" stroke-width="0.8" stroke-dasharray="3 2" />`;
     });
   }
 
-  // Divisiones de puertas
   const doorCount = armario.doors.length;
   const doorWidth = w / doorCount;
   for (let i = 1; i < doorCount; i++) {
     svg += `<line x1="${30 + doorWidth * i}" y1="25" x2="${30 + doorWidth * i}" y2="${25 + h}" stroke="#2D2823" stroke-width="1.2" />`;
   }
 
-  // COTAS - Ancho
   svg += `<line x1="30" y1="10" x2="${30 + w}" y2="10" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<line x1="30" y1="5" x2="30" y2="15" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<line x1="${30 + w}" y1="5" x2="${30 + w}" y2="15" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<text x="${30 + w/2}" y="8" text-anchor="middle" font-size="10" font-weight="bold" fill="#2D2823">${ancho}mm</text>`;
 
-  // COTAS - Alto
   svg += `<line x1="${w + 45}" y1="25" x2="${w + 45}" y2="${25 + h}" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<line x1="${w + 40}" y1="25" x2="${w + 50}" y2="25" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<line x1="${w + 40}" y1="${25 + h}" x2="${w + 50}" y2="${25 + h}" stroke="#2D2823" stroke-width="0.8" />`;
@@ -266,20 +339,17 @@ function CabinetSVGPlanta(armario: any) {
   let svg = `<svg viewBox="0 0 ${w + 60} ${p + 80}" style="width: 100%; max-height: 150px;">`;
   svg += `<rect x="30" y="25" width="${w}" height="${p}" fill="#FAF7F2" stroke="#2D2823" stroke-width="2" />`;
   
-  // Divisiones
   const doorCount = armario.doors.length;
   const doorWidth = w / doorCount;
   for (let i = 1; i < doorCount; i++) {
     svg += `<line x1="${30 + doorWidth * i}" y1="25" x2="${30 + doorWidth * i}" y2="${25 + p}" stroke="#2D2823" stroke-width="1.2" ${armario.type === 'corredera' ? 'stroke-dasharray="4 2"' : ''} />`;
   }
 
-  // COTAS - Ancho
   svg += `<line x1="30" y1="10" x2="${30 + w}" y2="10" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<line x1="30" y1="5" x2="30" y2="15" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<line x1="${30 + w}" y1="5" x2="${30 + w}" y2="15" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<text x="${30 + w/2}" y="8" text-anchor="middle" font-size="10" font-weight="bold" fill="#2D2823">${ancho}mm</text>`;
 
-  // COTAS - Profundidad
   svg += `<line x1="${w + 45}" y1="25" x2="${w + 45}" y2="${25 + p}" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<line x1="${w + 40}" y1="25" x2="${w + 50}" y2="25" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<line x1="${w + 40}" y1="${25 + p}" x2="${w + 50}" y2="${25 + p}" stroke="#2D2823" stroke-width="0.8" />`;
@@ -299,12 +369,10 @@ function CabinetSVGSeccion(armario: any) {
   let svg = `<svg viewBox="0 0 ${p + 60} ${h + 80}" style="width: 100%; max-height: 150px;">`;
   svg += `<rect x="30" y="25" width="${p}" height="${h}" fill="#FAF7F2" stroke="#2D2823" stroke-width="2" />`;
   
-  // Barra colgante
   if (armario.interior.barraColgar) {
     svg += `<line x1="35" y1="${25 + h * 0.18}" x2="${p + 25}" y2="${25 + h * 0.18}" stroke="#B08D57" stroke-width="2" />`;
   }
 
-  // Cajones
   if (armario.interior.cajones > 0) {
     const cajonH = (h * (armario.interior.cajones * armario.interior.cajonHeight / armario.alto)) / armario.interior.cajones;
     for (let i = 1; i < armario.interior.cajones; i++) {
@@ -313,13 +381,11 @@ function CabinetSVGSeccion(armario: any) {
     }
   }
 
-  // COTAS - Profundidad
   svg += `<line x1="30" y1="10" x2="${30 + p}" y2="10" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<line x1="30" y1="5" x2="30" y2="15" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<line x1="${30 + p}" y1="5" x2="${30 + p}" y2="15" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<text x="${30 + p/2}" y="8" text-anchor="middle" font-size="10" font-weight="bold" fill="#2D2823">${prof}mm</text>`;
 
-  // COTAS - Alto
   svg += `<line x1="${p + 45}" y1="25" x2="${p + 45}" y2="${25 + h}" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<line x1="${p + 40}" y1="25" x2="${p + 50}" y2="25" stroke="#2D2823" stroke-width="0.8" />`;
   svg += `<line x1="${p + 40}" y1="${25 + h}" x2="${p + 50}" y2="${25 + h}" stroke="#2D2823" stroke-width="0.8" />`;
