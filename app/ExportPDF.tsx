@@ -190,6 +190,22 @@ export default function ExportPDF({ projectData, armarios, puertas }: any) {
         container.style.backgroundColor = 'white';
         container.style.boxSizing = 'border-box';
 
+        let tablasHTML = '';
+        puertas.forEach((p: any, idx: any) => {
+          tablasHTML += `
+            <tr style="background: ${idx % 2 === 0 ? '#faf7f2' : 'white'}; border-bottom: 1px solid #d9cdb8;">
+              <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.unidades}</td>
+              <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.ubicacion}</td>
+              <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.tipo}</td>
+              <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.subtipo}</td>
+              <td style="border: 1px solid #d9cdb8; padding: 3mm; text-align: center;">${p.alto}</td>
+              <td style="border: 1px solid #d9cdb8; padding: 3mm; text-align: center;">${p.ancho}</td>
+              <td style="border: 1px solid #d9cdb8; padding: 3mm; text-align: center;">${p.anchoCerco}</td>
+              <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.apertura === 'derecha' ? 'A derechas' : 'A izquierdas'}</td>
+            </tr>
+          `;
+        });
+
         container.innerHTML = `
           <!-- HEADER -->
           <div style="background: linear-gradient(135deg, #2D2823 0%, #1a1612 100%); color: white; padding: 8mm; border-radius: 3mm; margin-bottom: 8mm;">
@@ -221,18 +237,7 @@ export default function ExportPDF({ projectData, armarios, puertas }: any) {
               </tr>
             </thead>
             <tbody>
-              ${puertas.map((p, idx) => `
-                <tr style="background: ${idx % 2 === 0 ? '#faf7f2' : 'white'}; border-bottom: 1px solid #d9cdb8;">
-                  <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.unidades}</td>
-                  <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.ubicacion}</td>
-                  <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.tipo}</td>
-                  <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.subtipo}</td>
-                  <td style="border: 1px solid #d9cdb8; padding: 3mm; text-align: center;">${p.alto}</td>
-                  <td style="border: 1px solid #d9cdb8; padding: 3mm; text-align: center;">${p.ancho}</td>
-                  <td style="border: 1px solid #d9cdb8; padding: 3mm; text-align: center;">${p.anchoCerco}</td>
-                  <td style="border: 1px solid #d9cdb8; padding: 3mm;">${p.apertura === 'derecha' ? 'A derechas' : 'A izquierdas'}</td>
-                </tr>
-              `).join('')}
+              ${tablasHTML}
             </tbody>
           </table>
 
