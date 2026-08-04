@@ -47,6 +47,15 @@ export default function Home() {
   const [puertas, setPuertas] = useState([
     {
       id: 1,
+      modelo: '',
+      color: '',
+      cerco: 'con',
+      tapetas: '70x12',
+      pernios: 'INOX',
+      herraje: 'INOX',
+      fechaMedicion: new Date().toISOString().split('T')[0],
+      fechaInstalacion: '',
+      equipoInstalacion: '',
       ubicacion: 'Dormitorio 1',
       tipo: 'CIEGA',
       subtipo: 'BATIENTE',
@@ -89,6 +98,15 @@ export default function Home() {
   const agregarPuerta = () => {
     const nuevaPuerta = {
       id: Date.now(),
+      modelo: '',
+      color: '',
+      cerco: 'con',
+      tapetas: '70x12',
+      pernios: 'INOX',
+      herraje: 'INOX',
+      fechaMedicion: new Date().toISOString().split('T')[0],
+      fechaInstalacion: '',
+      equipoInstalacion: '',
       ubicacion: 'Dormitorio',
       tipo: 'CIEGA',
       subtipo: 'BATIENTE',
