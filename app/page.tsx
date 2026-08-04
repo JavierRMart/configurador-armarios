@@ -4,8 +4,12 @@ import React, { useState } from 'react';
 import ExportPDF from './ExportPDF';
 import CabinetSVG from './CabinetSVG';
 import CabinetEditor from './CabinetEditor';
+import DoorSVG from './DoorSVG';
+import DoorEditor from './DoorEditor';
 
 export default function Home() {
+  const [seccion, setSeccion] = useState<'armarios' | 'puertas'>('armarios');
+
   const [projectData, setProjectData] = useState({
     clientName: 'Mi Cliente',
     address: 'Dirección',
@@ -40,6 +44,20 @@ export default function Home() {
     }
   ]);
 
+  const [puertas, setPuertas] = useState([
+    {
+      id: 1,
+      ubicacion: 'Dormitorio 1',
+      tipo: 'CIEGA',
+      subtipo: 'BATIENTE',
+      alto: 2030,
+      ancho: 625,
+      anchoCerco: 80,
+      apertura: 'derecha',
+      unidades: 1,
+    }
+  ]);
+
   const agregarArmario = () => {
     const nuevoArmario = {
       id: Date.now(),
@@ -68,8 +86,27 @@ export default function Home() {
     setArmarios([...armarios, nuevoArmario]);
   };
 
+  const agregarPuerta = () => {
+    const nuevaPuerta = {
+      id: Date.now(),
+      ubicacion: 'Dormitorio',
+      tipo: 'CIEGA',
+      subtipo: 'BATIENTE',
+      alto: 2030,
+      ancho: 625,
+      anchoCerco: 80,
+      apertura: 'derecha',
+      unidades: 1,
+    };
+    setPuertas([...puertas, nuevaPuerta]);
+  };
+
   const eliminarArmario = (id: number) => {
     setArmarios(armarios.filter(a => a.id !== id));
+  };
+
+  const eliminarPuerta = (id: number) => {
+    setPuertas(puertas.filter(p => p.id !== id));
   };
 
   const actualizarArmario = (id: number, campo: string, valor: any) => {
@@ -86,6 +123,20 @@ export default function Home() {
     );
   };
 
+  const actualizarPuerta = (id: number, campo: string, valor: any) => {
+    setPuertas(
+      puertas.map(p => {
+        if (p.id === id) {
+          if (['alto', 'ancho', 'anchoCerco', 'unidades'].includes(campo)) {
+            return { ...p, [campo]: Number(valor) };
+          }
+          return { ...p, [campo]: valor };
+        }
+        return p;
+      })
+    );
+  };
+
   return (
     <div style={{
       fontFamily: 'Arial, sans-serif',
@@ -95,9 +146,10 @@ export default function Home() {
     }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <h1 style={{ color: '#1a1612', marginBottom: '10px' }}>
-          Configurador de Armarios
+          Configurador de Mediciones
         </h1>
 
+        {/* DATOS DEL PROYECTO */}
         <div style={{
           background: 'white',
           padding: '20px',
@@ -190,169 +242,283 @@ export default function Home() {
           </div>
         </div>
 
+        {/* PESTAÑAS DE SECCIONES */}
         <div style={{ marginBottom: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <h2 style={{ color: '#1a1612', margin: 0 }}>
-              Armarios ({armarios.length})
-            </h2>
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', borderBottom: '2px solid #d9cdb8' }}>
             <button
-              onClick={agregarArmario}
+              onClick={() => setSeccion('armarios')}
               style={{
-                background: '#b08d57',
-                color: 'white',
+                padding: '12px 24px',
+                background: seccion === 'armarios' ? '#B08D57' : 'transparent',
+                color: seccion === 'armarios' ? 'white' : '#6b5d4f',
                 border: 'none',
-                padding: '10px 20px',
-                borderRadius: '4px',
                 cursor: 'pointer',
-                fontWeight: 'bold',
+                fontWeight: 700,
+                fontSize: 14,
+                borderRadius: '0 0 0 0',
               }}
             >
-              + Agregar armario
+              📦 ARMARIOS ({armarios.length})
+            </button>
+            <button
+              onClick={() => setSeccion('puertas')}
+              style={{
+                padding: '12px 24px',
+                background: seccion === 'puertas' ? '#B08D57' : 'transparent',
+                color: seccion === 'puertas' ? 'white' : '#6b5d4f',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: 14,
+              }}
+            >
+              🚪 PUERTAS ({puertas.length})
             </button>
           </div>
 
-          <div 
-            id="contenido-pdf"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
-              gap: '20px',
-            }}>
-            {armarios.map((armario) => (
-              <div
-                key={armario.id}
-                style={{
-                  background: 'white',
-                  padding: '20px',
-                  borderRadius: '8px',
-                  border: '1px solid #d9cdb8',
-                }}
-              >
-                <div style={{ marginBottom: '15px' }}>
-                  <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
-                    UBICACIÓN
-                  </label>
-                  <input
-                    type="text"
-                    value={armario.ubicacion}
-                    onChange={(e) => actualizarArmario(armario.id, 'ubicacion', e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px',
-                      fontSize: '14px',
-                      border: '1px solid #ccc',
-                      borderRadius: '4px',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                </div>
-
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr 1fr',
-                  gap: '10px',
-                  marginBottom: '15px',
-                }}>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
-                      Ancho (cm)
-                    </label>
-                    <input
-                      type="number"
-                      value={armario.ancho}
-                      onChange={(e) => actualizarArmario(armario.id, 'ancho', e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px',
-                        fontSize: '14px',
-                        border: '1px solid #ccc',
-                        borderRadius: '4px',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
-                      Alto (cm)
-                    </label>
-                    <input
-                      type="number"
-                      value={armario.alto}
-                      onChange={(e) => actualizarArmario(armario.id, 'alto', e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px',
-                        fontSize: '14px',
-                        border: '1px solid #ccc',
-                        borderRadius: '4px',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
-                      Profundidad (cm)
-                    </label>
-                    <input
-                      type="number"
-                      value={armario.profundidad}
-                      onChange={(e) => actualizarArmario(armario.id, 'profundidad', e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px',
-                        fontSize: '14px',
-                        border: '1px solid #ccc',
-                        borderRadius: '4px',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: '15px', padding: '10px', background: '#faf7f2', borderRadius: '4px' }}>
-                  <CabinetSVG armario={armario} />
-                </div>
-
-                <div style={{ marginBottom: '15px', borderTop: '1px solid #d9cdb8', paddingTop: '10px' }}>
-                  <CabinetEditor 
-                    armario={armario}
-                    onChange={(updated: any) => {
-                      setArmarios(armarios.map(a => a.id === updated.id ? updated : a));
-                    }}
-                  />
-                </div>
-
-                <p style={{
-                  margin: '10px 0 15px 0',
-                  fontSize: '12px',
-                  color: '#6b5d4f',
-                  textAlign: 'center',
-                  fontFamily: 'monospace',
-                }}>
-                  {Math.round(armario.ancho * 10)} × {Math.round(armario.alto * 10)} × {Math.round(armario.profundidad * 10)} mm
-                </p>
-
+          {/* SECCIÓN ARMARIOS */}
+          {seccion === 'armarios' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h2 style={{ color: '#1a1612', margin: 0 }}>Armarios</h2>
                 <button
-                  onClick={() => eliminarArmario(armario.id)}
+                  onClick={agregarArmario}
                   style={{
-                    width: '100%',
-                    background: '#c0392b',
+                    background: '#b08d57',
                     color: 'white',
                     border: 'none',
-                    padding: '10px',
+                    padding: '10px 20px',
                     borderRadius: '4px',
                     cursor: 'pointer',
                     fontWeight: 'bold',
                   }}
                 >
-                  Eliminar
+                  + Agregar armario
                 </button>
               </div>
-            ))}
-          </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
+                gap: '20px',
+              }}>
+                {armarios.map((armario) => (
+                  <div
+                    key={armario.id}
+                    style={{
+                      background: 'white',
+                      padding: '20px',
+                      borderRadius: '8px',
+                      border: '1px solid #d9cdb8',
+                    }}
+                  >
+                    <div style={{ marginBottom: '15px' }}>
+                      <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+                        UBICACIÓN
+                      </label>
+                      <input
+                        type="text"
+                        value={armario.ubicacion}
+                        onChange={(e) => actualizarArmario(armario.id, 'ubicacion', e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '8px',
+                          fontSize: '14px',
+                          border: '1px solid #ccc',
+                          borderRadius: '4px',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr',
+                      gap: '10px',
+                      marginBottom: '15px',
+                    }}>
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+                          Ancho (cm)
+                        </label>
+                        <input
+                          type="number"
+                          value={armario.ancho}
+                          onChange={(e) => actualizarArmario(armario.id, 'ancho', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            fontSize: '14px',
+                            border: '1px solid #ccc',
+                            borderRadius: '4px',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+                          Alto (cm)
+                        </label>
+                        <input
+                          type="number"
+                          value={armario.alto}
+                          onChange={(e) => actualizarArmario(armario.id, 'alto', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            fontSize: '14px',
+                            border: '1px solid #ccc',
+                            borderRadius: '4px',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+                          Profundidad (cm)
+                        </label>
+                        <input
+                          type="number"
+                          value={armario.profundidad}
+                          onChange={(e) => actualizarArmario(armario.id, 'profundidad', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            fontSize: '14px',
+                            border: '1px solid #ccc',
+                            borderRadius: '4px',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: '15px', padding: '10px', background: '#faf7f2', borderRadius: '4px' }}>
+                      <CabinetSVG armario={armario} />
+                    </div>
+
+                    <div style={{ marginBottom: '15px', borderTop: '1px solid #d9cdb8', paddingTop: '10px' }}>
+                      <CabinetEditor 
+                        armario={armario}
+                        onChange={(updated) => {
+                          setArmarios(armarios.map(a => a.id === updated.id ? updated : a));
+                        }}
+                      />
+                    </div>
+
+                    <p style={{
+                      margin: '10px 0 15px 0',
+                      fontSize: '12px',
+                      color: '#6b5d4f',
+                      textAlign: 'center',
+                      fontFamily: 'monospace',
+                    }}>
+                      {Math.round(armario.ancho * 10)} × {Math.round(armario.alto * 10)} × {Math.round(armario.profundidad * 10)} mm
+                    </p>
+
+                    <button
+                      onClick={() => eliminarArmario(armario.id)}
+                      style={{
+                        width: '100%',
+                        background: '#c0392b',
+                        color: 'white',
+                        border: 'none',
+                        padding: '10px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* SECCIÓN PUERTAS */}
+          {seccion === 'puertas' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h2 style={{ color: '#1a1612', margin: 0 }}>Puertas</h2>
+                <button
+                  onClick={agregarPuerta}
+                  style={{
+                    background: '#b08d57',
+                    color: 'white',
+                    border: 'none',
+                    padding: '10px 20px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  + Agregar puerta
+                </button>
+              </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
+                gap: '20px',
+              }}>
+                {puertas.map((puerta) => (
+                  <div
+                    key={puerta.id}
+                    style={{
+                      background: 'white',
+                      padding: '20px',
+                      borderRadius: '8px',
+                      border: '1px solid #d9cdb8',
+                    }}
+                  >
+                    <div style={{ marginBottom: '15px', padding: '10px', background: '#faf7f2', borderRadius: '4px' }}>
+                      <DoorSVG puerta={puerta} />
+                    </div>
+
+                    <div style={{ marginBottom: '15px', borderTop: '1px solid #d9cdb8', paddingTop: '10px' }}>
+                      <DoorEditor 
+                        puerta={puerta}
+                        onChange={(updated) => {
+                          setPuertas(puertas.map(p => p.id === updated.id ? updated : p));
+                        }}
+                      />
+                    </div>
+
+                    <p style={{
+                      margin: '10px 0 15px 0',
+                      fontSize: '12px',
+                      color: '#6b5d4f',
+                      textAlign: 'center',
+                      fontFamily: 'monospace',
+                    }}>
+                      {puerta.alto} × {puerta.ancho} × {puerta.anchoCerco} mm
+                    </p>
+
+                    <button
+                      onClick={() => eliminarPuerta(puerta.id)}
+                      style={{
+                        width: '100%',
+                        background: '#c0392b',
+                        color: 'white',
+                        border: 'none',
+                        padding: '10px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        <ExportPDF projectData={projectData} armarios={armarios} />
+        <ExportPDF projectData={projectData} armarios={armarios} puertas={puertas} />
       </div>
     </div>
   );
