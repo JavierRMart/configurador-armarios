@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import Auth from './Auth';
 import ExportPDF from './ExportPDF';
 import CabinetSVG from './CabinetSVG';
 import CabinetEditor from './CabinetEditor';
@@ -8,7 +10,38 @@ import DoorSVG from './DoorSVG';
 import DoorEditor from './DoorEditor';
 
 export default function Home() {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [seccion, setSeccion] = useState<'armarios' | 'puertas'>('armarios');
+
+  // Verificar autenticación
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      setLoading(false);
+    };
+    checkUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => subscription?.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
+  if (loading) {
+    return <div style={{ padding: '20px', textAlign: 'center' }}>Cargando...</div>;
+  }
+
+  if (!user) {
+    return <Auth />;
+  }
 
   const [projectData, setProjectData] = useState({
     clientName: 'Mi Cliente',
@@ -163,9 +196,31 @@ export default function Home() {
       padding: '20px',
     }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        <h1 style={{ color: '#1a1612', marginBottom: '10px' }}>
-          Configurador de Mediciones
-        </h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h1 style={{ color: '#1a1612', margin: 0 }}>
+            Configurador de Mediciones
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <span style={{ fontSize: '14px', color: '#6b5d4f' }}>
+              {user.email}
+            </span>
+            <button
+              onClick={handleLogout}
+              style={{
+                background: '#c0392b',
+                color: 'white',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                fontSize: '12px',
+              }}
+            >
+              🚪 Logout
+            </button>
+          </div>
+        </div>
 
         {/* DATOS DEL PROYECTO */}
         <div style={{
