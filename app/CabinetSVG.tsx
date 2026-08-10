@@ -1,7 +1,8 @@
 export default function CabinetSVG({ armario, forPrint = false }: any) {
-  const ancho = Math.round(armario.ancho * 10);
-  const alto = Math.round(armario.alto * 10);
-  const profundidad = Math.round(armario.profundidad * 10);
+  const ancho = armario.ancho;
+  const alto = armario.alto;
+  const profundidad = armario.profundidad;
+  const numSecciones = armario.numSecciones || armario.secciones?.length || 1;
 
   const padding = forPrint ? 60 : 70;
   const maxWidth = forPrint ? 300 : 280;
@@ -25,20 +26,8 @@ export default function CabinetSVG({ armario, forPrint = false }: any) {
     fillCajon: '#F1EADC',
   };
 
-  // Cajones al fondo
-  const cajoneraHeight = armario.interior.cajones * armario.interior.cajonHeight * scale;
-  const cajoneraTopY = startY + drawHeight - cajoneraHeight;
-
-  // Barra colgante (1/6 desde arriba)
-  const barraY = startY + drawHeight * 0.16;
-
-  // Posiciones de puertas
-  let cursor = startX;
-  const doorBoundaries = [startX];
-  armario.doors.forEach((door: any) => {
-    cursor += (door.width || 0) * scale;
-    doorBoundaries.push(cursor);
-  });
+  // Ancho de cada sección
+  const seccionWidth = drawWidth / numSecciones;
 
   const isCorredera = armario.type === 'corredera';
 
@@ -60,101 +49,74 @@ export default function CabinetSVG({ armario, forPrint = false }: any) {
         strokeWidth="1.5"
       />
 
-      {/* Cajonera (relleno distinto) */}
-      {armario.interior.cajones > 0 && (
-        <rect
-          x={startX}
-          y={cajoneraTopY}
-          width={drawWidth}
-          height={cajoneraHeight}
-          fill={colors.fillCajon}
-          stroke="none"
-        />
-      )}
+      {/* SECCIONES Y BALDAS */}
+      {armario.secciones && armario.secciones.map((seccion: any, secIdx: number) => {
+        const secStartX = startX + seccionWidth * secIdx;
+        const secStartY = startY;
+        const secDrawHeight = drawHeight;
+        const suelo = secStartY + secDrawHeight;
 
-      {/* Barra colgante */}
-      {armario.interior.barraColgar && (
-        <>
-          <line
-            x1={startX + 8}
-            y1={barraY}
-            x2={startX + drawWidth - 8}
-            y2={barraY}
-            stroke={colors.accent}
-            strokeWidth="1.5"
-          />
-          <circle cx={startX + 8} cy={barraY} r="2" fill={colors.accent} />
-          <circle cx={startX + drawWidth - 8} cy={barraY} r="2" fill={colors.accent} />
-        </>
-      )}
-
-      {/* Baldas */}
-      {armario.interior.baldas && (
-        <>
-          {[0.35, 0.55, 0.75].map((pos, i) => {
-            const y = startY + drawHeight * pos;
-            if (armario.interior.cajones > 0 && y > cajoneraTopY - 6) return null;
-            return (
-              <line
-                key={i}
-                x1={startX + 4}
-                y1={y}
-                x2={startX + drawWidth - 4}
-                y2={y}
-                stroke={colors.lineSoft}
-                strokeWidth="0.6"
-                strokeDasharray="3 2"
-              />
-            );
-          })}
-        </>
-      )}
-
-      {/* Cajones */}
-      {Array.from({ length: armario.interior.cajones - 1 }).map((_, i) => {
-        const y = cajoneraTopY + (armario.interior.cajonHeight * scale) * (i + 1);
         return (
-          <line
-            key={i}
-            x1={startX}
-            y1={y}
-            x2={startX + drawWidth}
-            y2={y}
-            stroke={colors.line}
-            strokeWidth="0.8"
-          />
+          <g key={seccion.id}>
+            {/* Dibujar baldas de esta sección - DE SUELO A TECHO */}
+            {seccion.interior?.baldas?.map((balda: any, baldaIdx: number) => {
+              const yActual = suelo - ((balda.altura || 0) * scale);
+              
+              if (yActual >= secStartY && yActual <= suelo) {
+                return (
+                  <g key={balda.id}>
+                    {/* Línea de balda */}
+                    <line
+                      x1={secStartX}
+                      y1={yActual}
+                      x2={secStartX + seccionWidth}
+                      y2={yActual}
+                      stroke={colors.lineSoft}
+                      strokeWidth="0.8"
+                    />
+                    {/* Grosor de balda (pequeño rectángulo) */}
+                    <rect
+                      x={secStartX}
+                      y={yActual}
+                      width={seccionWidth}
+                      height={(balda.grosor || 16) * scale}
+                      fill={colors.fillCajon}
+                      stroke="none"
+                    />
+                  </g>
+                );
+              }
+              return null;
+            })}
+
+            {/* Barra colgante si existe en esta sección */}
+            {seccion.interior?.baldas?.[0] && (
+              <line
+                x1={secStartX + 8}
+                y1={startY + alto * 0.15 * scale}
+                x2={secStartX + seccionWidth - 8}
+                y2={startY + alto * 0.15 * scale}
+                stroke={colors.accent}
+                strokeWidth="1.5"
+              />
+            )}
+          </g>
         );
       })}
 
-      {/* Divisiones de puertas */}
-      {doorBoundaries.slice(1, -1).map((x, i) => (
+      {/* Divisiones de secciones */}
+      {Array.from({ length: numSecciones - 1 }).map((_, i) => (
         <line
-          key={i}
-          x1={x}
+          key={`divider-${i}`}
+          x1={startX + seccionWidth * (i + 1)}
           y1={startY}
-          x2={x}
+          x2={startX + seccionWidth * (i + 1)}
           y2={startY + drawHeight}
           stroke={colors.line}
           strokeWidth={isCorredera ? "0.8" : "1.2"}
           strokeDasharray={isCorredera ? "4 2" : "none"}
         />
       ))}
-
-      {/* Tiradores (abatibles) */}
-      {!isCorredera &&
-        armario.doors.map((door: any, i: number) => {
-          const xLeft = doorBoundaries[i];
-          const xRight = doorBoundaries[i + 1];
-          if (i < armario.doors.length - 1) {
-            return (
-              <g key={i}>
-                <rect x={xRight - 3} y={startY + drawHeight * 0.45} width="2" height="14" fill={colors.accent} />
-                <rect x={xRight + 1} y={startY + drawHeight * 0.45} width="2" height="14" fill={colors.accent} />
-              </g>
-            );
-          }
-          return null;
-        })}
 
       {/* COTAS - Ancho arriba */}
       <line x1={startX} y1={startY - 40} x2={startX + drawWidth} y2={startY - 40} stroke={colors.line} strokeWidth="0.5" />
@@ -195,7 +157,7 @@ export default function CabinetSVG({ armario, forPrint = false }: any) {
         fontWeight="bold"
         fill={colors.line}
       >
-        ALZADO
+        ALZADO ({numSecciones} secc.)
       </text>
     </svg>
   );
