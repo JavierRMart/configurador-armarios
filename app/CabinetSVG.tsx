@@ -1,6 +1,7 @@
 export default function CabinetSVG({ armario, forPrint = false }: any) {
   const ancho = armario.ancho;
   const alto = armario.alto;
+  const profundidad = armario.profundidad;
   const numSecciones = armario.numSecciones || armario.secciones?.length || 1;
 
   const padding = forPrint ? 60 : 70;
@@ -22,35 +23,13 @@ export default function CabinetSVG({ armario, forPrint = false }: any) {
     lineSoft: '#6B5D4F',
     accent: '#B08D57',
     fill: '#FAF7F2',
-    fillBalda: '#F1EADC',
-    fillCajonera: '#E8DCC8',
+    fillCajon: '#F1EADC',
   };
 
+  // Ancho de cada sección
   const seccionWidth = drawWidth / numSecciones;
+
   const isCorredera = armario.type === 'corredera';
-
-  // ============ HELPERS (mismos criterios que el editor) ============
-  const getBaldas = (seccion: any): any[] => {
-    if (Array.isArray(seccion?.interior?.baldas)) return seccion.interior.baldas;
-    if (Array.isArray(seccion?.interior?.elementos)) {
-      return seccion.interior.elementos
-        .filter((e: any) => e.tipo === 'balda')
-        .map((e: any) => ({ id: e.id, altura: e.altura || 0, grosor: e.grosor ?? 16 }));
-    }
-    return [];
-  };
-
-  const getCajonera = (seccion: any): any => {
-    if (seccion?.interior?.cajonera) return seccion.interior.cajonera;
-    if (Array.isArray(seccion?.interior?.elementos)) {
-      const c = seccion.interior.elementos.find((e: any) => e.tipo === 'cajonera');
-      if (c) return { id: c.id, cajones: c.cajones || [] };
-    }
-    return null;
-  };
-
-  const alturaCajonera = (cajonera: any): number =>
-    !cajonera ? 0 : (cajonera.cajones || []).reduce((s: number, c: any) => s + (c.altura || 0), 0);
 
   return (
     <svg
@@ -70,112 +49,55 @@ export default function CabinetSVG({ armario, forPrint = false }: any) {
         strokeWidth="1.5"
       />
 
-      {/* SECCIONES */}
+      {/* SECCIONES Y BALDAS */}
       {armario.secciones && armario.secciones.map((seccion: any, secIdx: number) => {
-        const secX = startX + seccionWidth * secIdx;
-        const suelo = startY + drawHeight;
-
-        const cajonera = getCajonera(seccion);
-        const baldas = getBaldas(seccion);
-        const hCajonera = alturaCajonera(cajonera);
+        const secStartX = startX + seccionWidth * secIdx;
+        const secStartY = startY;
+        const secDrawHeight = drawHeight;
+        const suelo = secStartY + secDrawHeight;
 
         return (
           <g key={seccion.id}>
-
-            {/* ===== CAJONERA (apoyada en el suelo) ===== */}
-            {cajonera && hCajonera > 0 && (() => {
-              const hDibujo = hCajonera * scale;
-              const yTop = suelo - hDibujo;
-              if (yTop < startY) return null;
-
-              return (
-                <g>
-                  {/* Cuerpo de la cajonera */}
-                  <rect
-                    x={secX}
-                    y={yTop}
-                    width={seccionWidth}
-                    height={hDibujo}
-                    fill={colors.fillCajonera}
-                    stroke={colors.line}
-                    strokeWidth="1.2"
-                  />
-
-                  {/* Separadores entre cajones (de abajo a arriba) */}
-                  {(cajonera.cajones || []).map((cajon: any, i: number, arr: any[]) => {
-                    if (i === arr.length - 1) return null;
-                    const acum = arr.slice(0, i + 1).reduce((s: number, c: any) => s + (c.altura || 0), 0);
-                    const yLinea = suelo - acum * scale;
-                    return (
-                      <line
-                        key={cajon.id}
-                        x1={secX}
-                        y1={yLinea}
-                        x2={secX + seccionWidth}
-                        y2={yLinea}
-                        stroke={colors.line}
-                        strokeWidth="0.8"
-                      />
-                    );
-                  })}
-
-                  {/* Tiradores de cajón */}
-                  {(cajonera.cajones || []).map((cajon: any, i: number, arr: any[]) => {
-                    const acumAnterior = arr.slice(0, i).reduce((s: number, c: any) => s + (c.altura || 0), 0);
-                    const yCentro = suelo - (acumAnterior + (cajon.altura || 0) / 2) * scale;
-                    return (
-                      <line
-                        key={`tirador-${cajon.id}`}
-                        x1={secX + seccionWidth * 0.35}
-                        y1={yCentro}
-                        x2={secX + seccionWidth * 0.65}
-                        y2={yCentro}
-                        stroke={colors.accent}
-                        strokeWidth="1.4"
-                      />
-                    );
-                  })}
-                </g>
-              );
-            })()}
-
-            {/* ===== BALDAS (acumuladas sobre la cajonera) ===== */}
-            {baldas.map((balda: any, idx: number) => {
-              const cotaSuelo = hCajonera + baldas.slice(0, idx + 1).reduce((s: number, b: any) => s + (b.altura || 0), 0);
-              const y = suelo - cotaSuelo * scale;
-              if (y < startY || y > suelo) return null;
-
-              return (
-                <g key={balda.id}>
-                  <rect
-                    x={secX}
-                    y={y}
-                    width={seccionWidth}
-                    height={(balda.grosor || 16) * scale}
-                    fill={colors.fillBalda}
-                    stroke="none"
-                  />
-                  <line
-                    x1={secX}
-                    y1={y}
-                    x2={secX + seccionWidth}
-                    y2={y}
-                    stroke={colors.lineSoft}
-                    strokeWidth="1"
-                  />
-                </g>
-              );
+            {/* Dibujar baldas de esta sección - DE SUELO A TECHO */}
+            {seccion.interior?.baldas?.map((balda: any, baldaIdx: number) => {
+              const yActual = suelo - ((balda.altura || 0) * scale);
+              
+              if (yActual >= secStartY && yActual <= suelo) {
+                return (
+                  <g key={balda.id}>
+                    {/* Línea de balda */}
+                    <line
+                      x1={secStartX}
+                      y1={yActual}
+                      x2={secStartX + seccionWidth}
+                      y2={yActual}
+                      stroke={colors.lineSoft}
+                      strokeWidth="0.8"
+                    />
+                    {/* Grosor de balda (pequeño rectángulo) */}
+                    <rect
+                      x={secStartX}
+                      y={yActual}
+                      width={seccionWidth}
+                      height={(balda.grosor || 16) * scale}
+                      fill={colors.fillCajon}
+                      stroke="none"
+                    />
+                  </g>
+                );
+              }
+              return null;
             })}
 
-            {/* ===== BARRA COLGANTE ===== */}
-            {seccion.interior?.tieneBarraAqui && (
+            {/* Barra colgante si existe en esta sección */}
+            {seccion.interior?.baldas?.[0] && (
               <line
-                x1={secX + 8}
+                x1={secStartX + 8}
                 y1={startY + alto * 0.15 * scale}
-                x2={secX + seccionWidth - 8}
+                x2={secStartX + seccionWidth - 8}
                 y2={startY + alto * 0.15 * scale}
                 stroke={colors.accent}
-                strokeWidth="2"
+                strokeWidth="1.5"
               />
             )}
           </g>
@@ -191,8 +113,8 @@ export default function CabinetSVG({ armario, forPrint = false }: any) {
           x2={startX + seccionWidth * (i + 1)}
           y2={startY + drawHeight}
           stroke={colors.line}
-          strokeWidth={isCorredera ? '0.8' : '1.2'}
-          strokeDasharray={isCorredera ? '4 2' : 'none'}
+          strokeWidth={isCorredera ? "0.8" : "1.2"}
+          strokeDasharray={isCorredera ? "4 2" : "none"}
         />
       ))}
 
@@ -200,7 +122,14 @@ export default function CabinetSVG({ armario, forPrint = false }: any) {
       <line x1={startX} y1={startY - 40} x2={startX + drawWidth} y2={startY - 40} stroke={colors.line} strokeWidth="0.5" />
       <line x1={startX} y1={startY - 45} x2={startX} y2={startY - 35} stroke={colors.line} strokeWidth="0.5" />
       <line x1={startX + drawWidth} y1={startY - 45} x2={startX + drawWidth} y2={startY - 35} stroke={colors.line} strokeWidth="0.5" />
-      <text x={startX + drawWidth / 2} y={startY - 42} textAnchor="middle" fontSize="12" fontWeight="bold" fill={colors.line}>
+      <text
+        x={startX + drawWidth / 2}
+        y={startY - 42}
+        textAnchor="middle"
+        fontSize="12"
+        fontWeight="bold"
+        fill={colors.line}
+      >
         {ancho}
       </text>
 
@@ -208,12 +137,26 @@ export default function CabinetSVG({ armario, forPrint = false }: any) {
       <line x1={startX + drawWidth + 35} y1={startY} x2={startX + drawWidth + 35} y2={startY + drawHeight} stroke={colors.line} strokeWidth="0.5" />
       <line x1={startX + drawWidth + 30} y1={startY} x2={startX + drawWidth + 40} y2={startY} stroke={colors.line} strokeWidth="0.5" />
       <line x1={startX + drawWidth + 30} y1={startY + drawHeight} x2={startX + drawWidth + 40} y2={startY + drawHeight} stroke={colors.line} strokeWidth="0.5" />
-      <text x={startX + drawWidth + 50} y={startY + drawHeight / 2} textAnchor="start" fontSize="12" fontWeight="bold" fill={colors.line}>
+      <text
+        x={startX + drawWidth + 50}
+        y={startY + drawHeight / 2}
+        textAnchor="start"
+        fontSize="12"
+        fontWeight="bold"
+        fill={colors.line}
+      >
         {alto}
       </text>
 
       {/* Etiqueta */}
-      <text x={startX + drawWidth / 2} y={startY + drawHeight + 50} textAnchor="middle" fontSize="14" fontWeight="bold" fill={colors.line}>
+      <text
+        x={startX + drawWidth / 2}
+        y={startY + drawHeight + 50}
+        textAnchor="middle"
+        fontSize="14"
+        fontWeight="bold"
+        fill={colors.line}
+      >
         ALZADO ({numSecciones} secc.)
       </text>
     </svg>
