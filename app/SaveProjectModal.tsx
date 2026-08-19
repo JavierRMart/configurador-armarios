@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createProject, updateProject } from '@/lib/projects';
 
 export default function SaveProjectModal({
@@ -18,15 +18,23 @@ export default function SaveProjectModal({
   config: any;
   onSaveSuccess: (id: string, nombre: string) => void;
 }) {
-  const [nombre, setNombre] = useState(
-    projectId ? '' : `${tipo === 'armario' ? 'Armario' : 'Puerta'} — ${new Date().toLocaleDateString('es-ES')}`
-  );
+  const [nombre, setNombre] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [mode, setMode] = useState<'save' | 'update'>('save');
 
+  // Al abrir el modal, preparar valores por defecto
+  useEffect(() => {
+    if (!isOpen) return;
+    setError('');
+    setMode(projectId ? 'update' : 'save');
+    setNombre(
+      `${tipo === 'armario' ? 'Armario' : 'Puerta'} — ${new Date().toLocaleDateString('es-ES')}`
+    );
+  }, [isOpen, projectId, tipo]);
+
   const handleSave = async () => {
-    if (!nombre.trim()) {
+    if (mode === 'save' && !nombre.trim()) {
       setError('El nombre no puede estar vacío');
       return;
     }
@@ -36,10 +44,10 @@ export default function SaveProjectModal({
 
     try {
       if (projectId && mode === 'update') {
-        await updateProject(projectId, { config });
-        onSaveSuccess(projectId, nombre);
+        const result = await updateProject(projectId, { config });
+        onSaveSuccess(result.id, result.nombre);
       } else {
-        const result = await createProject(nombre, tipo, config);
+        const result = await createProject(nombre.trim(), tipo, config);
         onSaveSuccess(result.id, result.nombre);
       }
       onClose();
@@ -73,7 +81,7 @@ export default function SaveProjectModal({
           {projectId ? 'Guardar cambios' : 'Guardar proyecto'}
         </h2>
 
-        {projectId && !nombre && (
+        {projectId && (
           <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
             <button
               onClick={() => setMode('update')}
@@ -88,7 +96,7 @@ export default function SaveProjectModal({
                 fontWeight: 'bold',
               }}
             >
-              Actualizar
+              Actualizar este
             </button>
             <button
               onClick={() => setMode('save')}
@@ -121,6 +129,9 @@ export default function SaveProjectModal({
                 setError('');
               }}
               autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !saving) handleSave();
+              }}
               style={{
                 width: '100%',
                 padding: '10px',
@@ -130,10 +141,17 @@ export default function SaveProjectModal({
                 boxSizing: 'border-box',
               }}
             />
-            {error && (
-              <p style={{ color: '#c0392b', fontSize: '12px', margin: '5px 0 0 0' }}>{error}</p>
-            )}
           </div>
+        )}
+
+        {mode === 'update' && (
+          <p style={{ color: '#6b5d4f', fontSize: '14px', marginBottom: '20px' }}>
+            Se sobrescribirá el proyecto actual con la configuración de pantalla.
+          </p>
+        )}
+
+        {error && (
+          <p style={{ color: '#c0392b', fontSize: '13px', margin: '0 0 15px 0' }}>{error}</p>
         )}
 
         <div style={{ display: 'flex', gap: '10px' }}>

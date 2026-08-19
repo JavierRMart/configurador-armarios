@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { getProject } from '@/lib/projects';
 import Auth from '../Auth';
 import ExportPDF from '../ExportPDF';
 import CabinetSVG from '../CabinetSVG';
@@ -17,6 +18,78 @@ function cleanNumber(value: any): number {
   return isNaN(num) ? 0 : num;
 }
 
+const ARMARIO_INICIAL = [
+  {
+    id: 1,
+    ubicacion: 'Habitación 1',
+    name: '',
+    type: 'abatible',
+    numSecciones: 2,
+    ancho: 2000,
+    alto: 2400,
+    profundidad: 600,
+    secciones: [
+      {
+        id: 1,
+        numero: 1,
+        ancho: 1000,
+        interior: {
+          baldas: [
+            { id: 1, altura: 400, grosor: 16 },
+            { id: 2, altura: 400, grosor: 16 },
+            { id: 3, altura: 600, grosor: 16 },
+          ],
+          tieneBarraAqui: true,
+        },
+      },
+      {
+        id: 2,
+        numero: 2,
+        ancho: 1000,
+        interior: {
+          baldas: [
+            { id: 1, altura: 200, grosor: 16 },
+            { id: 2, altura: 200, grosor: 16 },
+            { id: 3, altura: 200, grosor: 16 },
+            { id: 4, altura: 600, grosor: 16 },
+          ],
+          tieneBarraAqui: false,
+        },
+      },
+    ],
+    finishes: {
+      interiorTextil: 'Cactus',
+      doorStyle: 'lisa',
+      handle: 'Latón mate',
+      costadosVistos: false,
+    },
+    notes: ''
+  }
+];
+
+const PUERTA_INICIAL = [
+  {
+    id: 1,
+    modelo: '',
+    color: '',
+    cerco: 'con',
+    tapetas: '70x12',
+    pernios: 'INOX',
+    herraje: 'INOX',
+    fechaMedicion: new Date().toISOString().split('T')[0],
+    fechaInstalacion: '',
+    equipoInstalacion: '',
+    ubicacion: 'Dormitorio 1',
+    tipo: 'CIEGA',
+    subtipo: 'BATIENTE',
+    alto: 2030,
+    ancho: 625,
+    anchoCerco: 80,
+    apertura: 'derecha',
+    unidades: 1,
+  }
+];
+
 export default function Configurador() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
@@ -25,6 +98,7 @@ export default function Configurador() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeProjectName, setActiveProjectName] = useState<string | null>(null);
+  const [cargandoProyecto, setCargandoProyecto] = useState(false);
 
   const [projectData, setProjectData] = useState({
     clientName: 'Mi Cliente',
@@ -33,78 +107,18 @@ export default function Configurador() {
     date: new Date().toISOString().split('T')[0],
   });
 
-  const [armarios, setArmarios] = useState([
-    {
-      id: 1,
-      ubicacion: 'Habitación 1',
-      name: '',
-      type: 'abatible',
-      numSecciones: 2,
-      ancho: 2000,
-      alto: 2400,
-      profundidad: 600,
-      secciones: [
-        {
-          id: 1,
-          numero: 1,
-          ancho: 1000,
-          interior: {
-            baldas: [
-              { id: 1, altura: 400, grosor: 16 },
-              { id: 2, altura: 400, grosor: 16 },
-              { id: 3, altura: 600, grosor: 16 },
-            ],
-            tieneBarraAqui: true,
-          },
-        },
-        {
-          id: 2,
-          numero: 2,
-          ancho: 1000,
-          interior: {
-            baldas: [
-              { id: 1, altura: 200, grosor: 16 },
-              { id: 2, altura: 200, grosor: 16 },
-              { id: 3, altura: 200, grosor: 16 },
-              { id: 4, altura: 600, grosor: 16 },
-            ],
-            tieneBarraAqui: false,
-          },
-        },
-      ],
-      finishes: {
-        interiorTextil: 'Cactus',
-        doorStyle: 'lisa',
-        handle: 'Latón mate',
-        costadosVistos: false,
-      },
-      notes: ''
-    }
-  ]);
+  const [armarios, setArmarios] = useState<any[]>(ARMARIO_INICIAL);
+  const [puertas, setPuertas] = useState<any[]>(PUERTA_INICIAL);
 
-  const [puertas, setPuertas] = useState([
-    {
-      id: 1,
-      modelo: '',
-      color: '',
-      cerco: 'con',
-      tapetas: '70x12',
-      pernios: 'INOX',
-      herraje: 'INOX',
-      fechaMedicion: new Date().toISOString().split('T')[0],
-      fechaInstalacion: '',
-      equipoInstalacion: '',
-      ubicacion: 'Dormitorio 1',
-      tipo: 'CIEGA',
-      subtipo: 'BATIENTE',
-      alto: 2030,
-      ancho: 625,
-      anchoCerco: 80,
-      apertura: 'derecha',
-      unidades: 1,
-    }
-  ]);
+  // Snapshot del último estado guardado, para detectar cambios sin guardar
+  const [snapshotGuardado, setSnapshotGuardado] = useState<string>('');
+  const snapshotInicializado = useRef(false);
 
+  const snapshotActual = JSON.stringify({ armarios, puertas, projectData });
+  const hayCambiosSinGuardar =
+    snapshotInicializado.current && snapshotActual !== snapshotGuardado;
+
+  // ===== AUTENTICACIÓN =====
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -120,7 +134,89 @@ export default function Configurador() {
     return () => subscription?.unsubscribe();
   }, []);
 
+  // ===== CARGAR PROYECTO DESDE LA URL (?proyecto=ID) =====
+  useEffect(() => {
+    if (!user) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const proyectoId = params.get('proyecto');
+
+    if (!proyectoId) {
+      // Proyecto nuevo: el estado inicial pasa a ser la referencia
+      setSnapshotGuardado(JSON.stringify({ armarios, puertas, projectData }));
+      snapshotInicializado.current = true;
+      return;
+    }
+
+    const cargar = async () => {
+      setCargandoProyecto(true);
+      try {
+        const proyecto = await getProject(proyectoId);
+        const cfg = proyecto.config || {};
+
+        const nuevosArmarios = Array.isArray(cfg.armarios) && cfg.armarios.length
+          ? cfg.armarios
+          : ARMARIO_INICIAL;
+        const nuevasPuertas = Array.isArray(cfg.puertas) && cfg.puertas.length
+          ? cfg.puertas
+          : PUERTA_INICIAL;
+        const nuevoProjectData = cfg.projectData || projectData;
+
+        setArmarios(nuevosArmarios);
+        setPuertas(nuevasPuertas);
+        setProjectData(nuevoProjectData);
+        setActiveProjectId(proyecto.id);
+        setActiveProjectName(proyecto.nombre);
+        setSeccion(proyecto.tipo === 'puerta' ? 'puertas' : 'armarios');
+
+        setSnapshotGuardado(JSON.stringify({
+          armarios: nuevosArmarios,
+          puertas: nuevasPuertas,
+          projectData: nuevoProjectData,
+        }));
+        snapshotInicializado.current = true;
+      } catch (err: any) {
+        alert('No se pudo cargar el proyecto: ' + (err.message || err));
+        snapshotInicializado.current = true;
+      } finally {
+        setCargandoProyecto(false);
+      }
+    };
+
+    cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // ===== AVISO AL CERRAR PESTAÑA CON CAMBIOS SIN GUARDAR =====
+  useEffect(() => {
+    if (!hayCambiosSinGuardar) return;
+
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hayCambiosSinGuardar]);
+
+  const salirAInicio = () => {
+    if (hayCambiosSinGuardar) {
+      const seguir = confirm(
+        'Tienes cambios sin guardar. Si sales ahora se perderán.\n\n¿Salir de todos modos?'
+      );
+      if (!seguir) return;
+    }
+    router.push('/');
+  };
+
   const handleLogout = async () => {
+    if (hayCambiosSinGuardar) {
+      const seguir = confirm(
+        'Tienes cambios sin guardar. Si cierras sesión ahora se perderán.\n\n¿Cerrar sesión de todos modos?'
+      );
+      if (!seguir) return;
+    }
     await supabase.auth.signOut();
     setUser(null);
   };
@@ -224,26 +320,20 @@ export default function Configurador() {
     );
   };
 
-  const actualizarPuerta = (id: number, campo: string, valor: any) => {
-    setPuertas(
-      puertas.map(p => {
-        if (p.id === id) {
-          if (['alto', 'ancho', 'anchoCerco', 'unidades'].includes(campo)) {
-            return { ...p, [campo]: cleanNumber(valor) };
-          }
-          return { ...p, [campo]: valor };
-        }
-        return p;
-      })
-    );
-  };
-
   if (loading) {
     return <div style={{ padding: '20px', textAlign: 'center' }}>Cargando...</div>;
   }
 
   if (!user) {
     return <Auth />;
+  }
+
+  if (cargandoProyecto) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'Arial, sans-serif' }}>
+        Cargando proyecto...
+      </div>
+    );
   }
 
   return (
@@ -268,12 +358,22 @@ export default function Configurador() {
             {activeProjectName && (
               <p style={{ color: '#b08d57', margin: '5px 0 0 0', fontSize: '14px' }}>
                 Proyecto: <strong>{activeProjectName}</strong>
+                {hayCambiosSinGuardar && (
+                  <span style={{ color: '#c0392b', marginLeft: '10px', fontWeight: 'bold' }}>
+                    • sin guardar
+                  </span>
+                )}
+              </p>
+            )}
+            {!activeProjectName && hayCambiosSinGuardar && (
+              <p style={{ color: '#c0392b', margin: '5px 0 0 0', fontSize: '14px', fontWeight: 'bold' }}>
+                Proyecto sin guardar
               </p>
             )}
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
-              onClick={() => router.push('/')}
+              onClick={salirAInicio}
               style={{
                 background: '#6b5d4f',
                 color: 'white',
@@ -289,7 +389,7 @@ export default function Configurador() {
             <button
               onClick={() => setShowSaveModal(true)}
               style={{
-                background: '#b08d57',
+                background: hayCambiosSinGuardar ? '#b08d57' : '#c9b896',
                 color: 'white',
                 border: 'none',
                 padding: '10px 20px',
@@ -562,7 +662,7 @@ export default function Configurador() {
                   </div>
 
                   {/* EDITOR COMPLETO */}
-                  <CabinetEditor 
+                  <CabinetEditor
                     armario={armario}
                     onChange={(updated: any) => {
                       setArmarios(armarios.map(a => a.id === updated.id ? updated : a));
@@ -633,7 +733,7 @@ export default function Configurador() {
                   </div>
 
                   <div style={{ marginBottom: '15px', borderTop: '1px solid #d9cdb8', paddingTop: '10px' }}>
-                    <DoorEditor 
+                    <DoorEditor
                       puerta={puerta}
                       onChange={(updated: any) => {
                         setPuertas(puertas.map(p => p.id === updated.id ? updated : p));
@@ -680,15 +780,12 @@ export default function Configurador() {
           onClose={() => setShowSaveModal(false)}
           projectId={activeProjectId || undefined}
           tipo={seccion === 'armarios' ? 'armario' : 'puerta'}
-          config={{
-            armarios: seccion === 'armarios' ? armarios : [],
-            puertas: seccion === 'puertas' ? puertas : [],
-            projectData,
-          }}
+          config={{ armarios, puertas, projectData }}
           onSaveSuccess={(id, nombre) => {
             setActiveProjectId(id);
             setActiveProjectName(nombre);
-            alert('Proyecto guardado exitosamente');
+            setSnapshotGuardado(JSON.stringify({ armarios, puertas, projectData }));
+            snapshotInicializado.current = true;
           }}
         />
       </div>
