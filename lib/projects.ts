@@ -14,7 +14,7 @@ export type Project = {
 // Listar proyectos del usuario
 export async function getProjects(): Promise<Project[]> {
   const { data, error } = await supabase
-    .from('projects_v2')
+    .from('user_projects')
     .select('*')
     .order('updated_at', { ascending: false });
   
@@ -32,7 +32,7 @@ export async function createProject(
   if (!user) throw new Error('No user logged in');
 
   const { data, error } = await supabase
-    .from('projects_v2')
+    .from('user_projects')
     .insert([{
       user_id: user.id,
       nombre,
@@ -52,7 +52,7 @@ export async function updateProject(
   updates: Partial<Pick<Project, 'nombre' | 'config' | 'estado'>>
 ): Promise<Project> {
   const { data, error } = await supabase
-    .from('projects_v2')
+    .from('user_projects')
     .update(updates)
     .eq('id', id)
     .select()
@@ -65,7 +65,7 @@ export async function updateProject(
 // Cargar proyecto
 export async function getProject(id: string): Promise<Project> {
   const { data, error } = await supabase
-    .from('projects_v2')
+    .from('user_projects')
     .select('*')
     .eq('id', id)
     .single();
@@ -77,7 +77,7 @@ export async function getProject(id: string): Promise<Project> {
 // Renombrar
 export async function renameProject(id: string, nombre: string): Promise<void> {
   const { error } = await supabase
-    .from('projects_v2')
+    .from('user_projects')
     .update({ nombre })
     .eq('id', id);
 
@@ -87,7 +87,7 @@ export async function renameProject(id: string, nombre: string): Promise<void> {
 // Eliminar
 export async function deleteProject(id: string): Promise<void> {
   const { error } = await supabase
-    .from('projects_v2')
+    .from('user_projects')
     .delete()
     .eq('id', id);
 
