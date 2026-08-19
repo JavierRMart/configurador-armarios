@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Auth from '../Auth';
 import ExportPDF from '../ExportPDF';
@@ -8,6 +9,7 @@ import CabinetSVG from '../CabinetSVG';
 import CabinetEditor from '../CabinetEditor';
 import DoorSVG from '../DoorSVG';
 import DoorEditor from '../DoorEditor';
+import SaveProjectModal from '../SaveProjectModal';
 
 function cleanNumber(value: any): number {
   if (!value) return 0;
@@ -16,9 +18,13 @@ function cleanNumber(value: any): number {
 }
 
 export default function Configurador() {
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [seccion, setSeccion] = useState<'armarios' | 'puertas'>('armarios');
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProjectName, setActiveProjectName] = useState<string | null>(null);
 
   const [projectData, setProjectData] = useState({
     clientName: 'Mi Cliente',
@@ -257,21 +263,58 @@ export default function Configurador() {
           paddingBottom: '20px',
           borderBottom: '2px solid #d9cdb8',
         }}>
-          <h1 style={{ color: '#1a1612', margin: 0, fontSize: '28px' }}>Configurador ARVE</h1>
-          <button
-            onClick={handleLogout}
-            style={{
-              background: '#c0392b',
-              color: 'white',
-              border: 'none',
-              padding: '10px 20px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-            }}
-          >
-            Logout
-          </button>
+          <div>
+            <h1 style={{ color: '#1a1612', margin: 0, fontSize: '28px' }}>Configurador ARVE</h1>
+            {activeProjectName && (
+              <p style={{ color: '#b08d57', margin: '5px 0 0 0', fontSize: '14px' }}>
+                Proyecto: <strong>{activeProjectName}</strong>
+              </p>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => router.push('/')}
+              style={{
+                background: '#6b5d4f',
+                color: 'white',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+              }}
+            >
+              ← Inicio
+            </button>
+            <button
+              onClick={() => setShowSaveModal(true)}
+              style={{
+                background: '#b08d57',
+                color: 'white',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+              }}
+            >
+              💾 Guardar
+            </button>
+            <button
+              onClick={handleLogout}
+              style={{
+                background: '#c0392b',
+                color: 'white',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+              }}
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         {/* TABS */}
@@ -630,6 +673,24 @@ export default function Configurador() {
         )}
 
         <ExportPDF projectData={projectData} armarios={armarios} puertas={puertas} />
+
+        {/* MODAL GUARDAR */}
+        <SaveProjectModal
+          isOpen={showSaveModal}
+          onClose={() => setShowSaveModal(false)}
+          projectId={activeProjectId || undefined}
+          tipo={seccion === 'armarios' ? 'armario' : 'puerta'}
+          config={{
+            armarios: seccion === 'armarios' ? armarios : [],
+            puertas: seccion === 'puertas' ? puertas : [],
+            projectData,
+          }}
+          onSaveSuccess={(id, nombre) => {
+            setActiveProjectId(id);
+            setActiveProjectName(nombre);
+            alert('Proyecto guardado exitosamente');
+          }}
+        />
       </div>
     </div>
   );
