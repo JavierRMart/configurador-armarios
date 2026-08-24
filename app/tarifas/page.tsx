@@ -67,6 +67,31 @@ export default function TarifasPage() {
     }
   };
 
+  const handleEliminar = async (tarifaId: string) => {
+    if (!confirm('¿Eliminar esta tarifa? No se puede deshacer.')) return;
+
+    try {
+      const tarifa = tarifas.find(t => t.id === tarifaId);
+      if (!tarifa) return;
+
+      // Eliminar el PDF de Storage
+      await supabase.storage
+        .from('tarifas')
+        .remove([tarifa.file_path]);
+
+      // Eliminar la tarifa de la base de datos
+      await supabase
+        .from('price_lists')
+        .delete()
+        .eq('id', tarifaId);
+
+      setTarifas(tarifas.filter(t => t.id !== tarifaId));
+      alert('Tarifa eliminada');
+    } catch (err: any) {
+      setError('Error al eliminar: ' + (err.message || err));
+    }
+  };
+
   const handleProcesar = async (tarifaId: string) => {
     setProcesando(tarifaId);
     setError('');
@@ -304,7 +329,7 @@ export default function TarifasPage() {
                   padding: '15px',
                   borderBottom: '1px solid #d9cdb8',
                   display: 'grid',
-                  gridTemplateColumns: '200px 1fr 150px 150px',
+                  gridTemplateColumns: '200px 1fr 150px 150px 100px',
                   gap: '15px',
                   alignItems: 'center',
                 }}>
@@ -349,7 +374,22 @@ export default function TarifasPage() {
                       opacity: procesando === tarifa.id ? 0.6 : 1,
                     }}
                   >
-                    {procesando === tarifa.id ? 'Procesando...' : 'Procesar precios'}
+                    {procesando === tarifa.id ? 'Procesando...' : 'Procesar'}
+                  </button>
+                  <button 
+                    onClick={() => handleEliminar(tarifa.id)}
+                    style={{
+                      padding: '8px 12px',
+                      background: '#c0392b',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    🗑️ Eliminar
                   </button>
                 </div>
               ))}
