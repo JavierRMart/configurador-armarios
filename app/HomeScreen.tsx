@@ -1,71 +1,140 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { useEffect, useState } from 'react';
 
 export default function HomeScreen() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/auth');
-        return;
-      }
       setUser(user);
-      setLoading(false);
     };
-    checkAuth();
-  }, [router]);
+    checkUser();
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push('/auth');
   };
 
-  if (loading) return <div className="flex items-center justify-center h-screen">Cargando...</div>;
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-16">
-          <div>
-            <h1 className="text-4xl font-bold text-slate-900">Configurador ARVE</h1>
-            <p className="text-lg text-slate-600 mt-2">Hola, {user?.email}</p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-          >
-            Logout
-          </button>
-        </div>
+    <div style={{
+      fontFamily: 'Arial, sans-serif',
+      background: 'linear-gradient(135deg, #f5f1e8 0%, #e8dcc8 100%)',
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px',
+    }}>
+      <div style={{
+        background: 'white',
+        borderRadius: '12px',
+        padding: '40px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+        maxWidth: '500px',
+        width: '100%',
+      }}>
+        <h1 style={{
+          color: '#1a1612',
+          margin: '0 0 10px 0',
+          fontSize: '32px',
+          textAlign: 'center',
+        }}>
+          ARVE
+        </h1>
+        <p style={{
+          color: '#b08d57',
+          margin: '0 0 30px 0',
+          textAlign: 'center',
+          fontSize: '14px',
+          fontWeight: 'bold',
+        }}>
+          Armarios y Vestidores Exclusivos
+        </p>
 
-        {/* Main actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Nuevo proyecto */}
+        {user && (
+          <p style={{
+            color: '#6b5d4f',
+            margin: '0 0 30px 0',
+            textAlign: 'center',
+            fontSize: '13px',
+          }}>
+            Bienvenido, {user.email}
+          </p>
+        )}
+
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '15px',
+        }}>
           <button
-            onClick={() => router.push('/configurador?nuevo=armario')}
-            className="p-8 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-2 border-slate-200 hover:border-blue-400 text-left"
+            onClick={() => router.push('/configurador')}
+            style={{
+              background: '#b08d57',
+              color: 'white',
+              border: 'none',
+              padding: '15px 30px',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
           >
-            <div className="text-4xl mb-4">➕</div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">Nuevo proyecto</h2>
-            <p className="text-slate-600">Empieza a configurar un armario o puerta nueva</p>
+            ➕ Nuevo Proyecto
           </button>
 
-          {/* Mis proyectos */}
           <button
             onClick={() => router.push('/proyectos')}
-            className="p-8 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-2 border-slate-200 hover:border-green-400 text-left"
+            style={{
+              background: '#b08d57',
+              color: 'white',
+              border: 'none',
+              padding: '15px 30px',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
           >
-            <div className="text-4xl mb-4">📂</div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">Mis proyectos</h2>
-            <p className="text-slate-600">Abre un proyecto guardado o consulta tu historial</p>
+            📂 Mis Proyectos
+          </button>
+
+          <button
+            onClick={() => router.push('/tarifas')}
+            style={{
+              background: '#b08d57',
+              color: 'white',
+              border: 'none',
+              padding: '15px 30px',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
+          >
+            📋 Gestionar Tarifas
+          </button>
+
+          <button
+            onClick={handleLogout}
+            style={{
+              background: '#c0392b',
+              color: 'white',
+              border: 'none',
+              padding: '15px 30px',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              marginTop: '15px',
+            }}
+          >
+            Logout
           </button>
         </div>
       </div>
