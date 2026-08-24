@@ -9,6 +9,8 @@ export async function createPriceList(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('No user logged in');
 
+  console.log('Creating price list for user:', user.id);
+
   const { data, error } = await supabase
     .from('price_lists')
     .insert([{
@@ -23,7 +25,12 @@ export async function createPriceList(
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error('Error creating price list:', error);
+    throw error;
+  }
+
+  console.log('Price list created:', data);
   return data;
 }
 
