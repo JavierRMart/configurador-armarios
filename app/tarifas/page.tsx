@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { createPriceList, getPriceLists } from '@/lib/price-lists';
+import { createPriceList, getPriceLists, updatePriceListState, addPriceListItems } from '@/lib/price-lists';
 
 export default function TarifasPage() {
   const [user, setUser] = useState<any>(null);
   const [tarifas, setTarifas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [procesando, setProcesando] = useState<string | null>(null);
   const [fabricante, setFabricante] = useState('');
   const [nombre, setNombre] = useState('');
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
@@ -63,6 +64,105 @@ export default function TarifasPage() {
       setError('Error al subir: ' + (err.message || err));
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleProcesar = async (tarifaId: string) => {
+    setProcesando(tarifaId);
+    setError('');
+
+    try {
+      const tarifa = tarifas.find(t => t.id === tarifaId);
+      if (!tarifa) throw new Error('Tarifa no encontrada');
+
+      // Descargar el PDF de Storage
+      const { data, error: downloadError } = await supabase.storage
+        .from('tarifas')
+        .download(tarifa.file_path);
+
+      if (downloadError) throw downloadError;
+
+      // Convertir a base64
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const base64 = (e.target?.result as string).split(',')[1];
+
+          // Llamar a la API de extracción
+          const response = await fetch('/api/extract-prices', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              pdfBase64: base64,
+              pageStart: 1,
+              pageEnd: 50,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Error en la extracción');
+          }
+
+          const result = await response.json();
+          const items = result.items || [];
+
+          // Validar y preparar items
+          const validItems = items
+            .filter((item: any) => {
+              return (
+                ['hoja', 'cerco', 'tapeta', 'herraje', 'pernio', 'manilla', 'suplemento', 'otro'].includes(item.categoria) &&
+                ['ud', 'm2', 'ml', 'juego'].includes(item.unidad) &&
+                typeof item.precio === 'number' &&
+                item.precio > 0
+              );
+            })
+            .map((item: any) => ({
+              price_list_id: tarifaId,
+              categoria: item.categoria,
+              referencia: item.referencia || null,
+              descripcion: item.descripcion,
+              atributos: {},
+              precio: item.precio,
+              unidad: item.unidad,
+              pagina_origen: item.pagina_origen,
+              aviso: item.aviso || null,
+              revisado: false,
+            }));
+
+          if (validItems.length === 0) {
+            throw new Error('No se extrajeron precios válidos del PDF');
+          }
+
+          // Guardar items en la base de datos
+          await addPriceListItems(validItems);
+
+          // Actualizar estado de la tarifa
+          await updatePriceListState(tarifaId, 'pendiente_revision', {
+            extraidos: validItems.length,
+            fecha: new Date().toISOString(),
+          });
+
+          // Actualizar en la UI
+          setTarifas(tarifas.map(t => 
+            t.id === tarifaId 
+              ? { ...t, estado: 'pendiente_revision' }
+              : t
+          ));
+
+          alert(`✅ Se extrajeron ${validItems.length} precios correctamente.\n\nEstado: Pendiente de revisión`);
+        } catch (err: any) {
+          setError('Error al procesar: ' + (err.message || err));
+        } finally {
+          setProcesando(null);
+        }
+      };
+      reader.readAsDataURL(new File([data!], 'temp.pdf'));
+    } catch (err: any) {
+      setError('Error: ' + (err.message || err));
+      setProcesando(null);
     }
   };
 
@@ -204,7 +304,7 @@ export default function TarifasPage() {
                   padding: '15px',
                   borderBottom: '1px solid #d9cdb8',
                   display: 'grid',
-                  gridTemplateColumns: '200px 1fr 150px 120px',
+                  gridTemplateColumns: '200px 1fr 150px 150px',
                   gap: '15px',
                   alignItems: 'center',
                 }}>
@@ -228,23 +328,28 @@ export default function TarifasPage() {
                       borderRadius: '4px',
                       fontSize: '11px',
                       fontWeight: 'bold',
-                      background: tarifa.estado === 'activa' ? '#27ae60' : '#f39c12',
+                      background: tarifa.estado === 'activa' ? '#27ae60' : tarifa.estado === 'procesando' ? '#3498db' : '#f39c12',
                       color: 'white',
                     }}>
                       {tarifa.estado}
                     </span>
                   </div>
-                  <button style={{
-                    padding: '8px 12px',
-                    background: '#b08d57',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                  }}>
-                    Revisar
+                  <button 
+                    onClick={() => handleProcesar(tarifa.id)}
+                    disabled={procesando === tarifa.id}
+                    style={{
+                      padding: '8px 12px',
+                      background: tarifa.estado === 'procesando' ? '#f39c12' : '#b08d57',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: tarifa.estado === 'procesando' ? 'default' : 'pointer',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      opacity: procesando === tarifa.id ? 0.6 : 1,
+                    }}
+                  >
+                    {procesando === tarifa.id ? 'Procesando...' : 'Procesar precios'}
                   </button>
                 </div>
               ))}
