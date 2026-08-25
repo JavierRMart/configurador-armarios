@@ -4,11 +4,18 @@ import { PDFDocument } from 'pdf-lib';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const MODELO = 'claude-sonnet-5';
 
+const CATEGORIAS = [
+  'puerta', 'armario', 'hoja', 'cerco', 'tapeta', 'moldura',
+  'rodapie', 'herraje', 'pernio', 'manilla', 'suplemento', 'otro',
+];
+const UNIDADES = ['ud', 'm2', 'ml', 'juego', 'tira'];
+const TIPOS_PRECIO = ['fijo', 'porcentaje'];
+
 export async function POST(request: NextRequest) {
   try {
     if (!ANTHROPIC_API_KEY) {
       return NextResponse.json(
-        { error: 'Falta la clave de la API. Revisa la configuración del servidor.' },
+        { error: 'Falta la clave de la API en el servidor.' },
         { status: 500 }
       );
     }
@@ -16,17 +23,12 @@ export async function POST(request: NextRequest) {
     const { pdfBase64, paginaInicio, paginaFin, soloContar } = await request.json();
 
     if (!pdfBase64) {
-      return NextResponse.json(
-        { error: 'No se ha recibido ningún PDF.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'No se ha recibido ningún PDF.' }, { status: 400 });
     }
 
-    const pdfBuffer = Buffer.from(pdfBase64, 'base64');
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pdfDoc = await PDFDocument.load(Buffer.from(pdfBase64, 'base64'));
     const totalPaginas = pdfDoc.getPageCount();
 
-    // Primera llamada: solo queremos saber cuántas páginas tiene
     if (soloContar) {
       return NextResponse.json({ totalPaginas });
     }
@@ -35,41 +37,17 @@ export async function POST(request: NextRequest) {
     const fin = Math.min(paginaFin ?? 0, totalPaginas - 1);
 
     if (inicio > fin) {
-      return NextResponse.json(
-        { error: 'El rango de páginas no es válido.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Rango de páginas no válido.' }, { status: 400 });
     }
 
-    // Recortar solo las páginas de este bloque
     const bloquePdf = await PDFDocument.create();
     const indices = Array.from({ length: fin - inicio + 1 }, (_, i) => inicio + i);
-    const paginasCopiadas = await bloquePdf.copyPages(pdfDoc, indices);
-    paginasCopiadas.forEach((p) => bloquePdf.addPage(p));
+    const copiadas = await bloquePdf.copyPages(pdfDoc, indices);
+    copiadas.forEach((p) => bloquePdf.addPage(p));
 
-    const bloqueBytes = await bloquePdf.save();
-    const bloqueBase64 = Buffer.from(bloqueBytes).toString('base64');
+    const bloqueBase64 = Buffer.from(await bloquePdf.save()).toString('base64');
 
-    const prompt = `Extrae todos los precios de este fragmento de una tarifa de puertas.
-Corresponde a las páginas ${inicio + 1} a ${fin + 1} del documento original.
-
-Para cada línea de precio devuelve un objeto con estos campos:
-- categoria: exactamente uno de estos: "hoja", "cerco", "tapeta", "herraje", "pernio", "manilla", "suplemento", "otro"
-- referencia: el código del producto si aparece, si no cadena vacía
-- descripcion: descripción del producto
-- precio: número, sin símbolo de moneda (ejemplo: 145.50)
-- unidad: exactamente uno de estos: "ud", "m2", "ml", "juego"
-- pagina_origen: número de página del documento original (entre ${inicio + 1} y ${fin + 1})
-- aviso: si el precio no se lee con seguridad, explica aquí por qué. Si está claro, cadena vacía.
-
-Reglas:
-- No inventes precios. No interpoles. No redondees.
-- Si no hay precios en estas páginas, devuelve un array vacío.
-
-Responde SOLO con el array JSON. Sin explicaciones, sin bloques de código markdown.
-
-Ejemplo del formato esperado:
-[{"categoria":"hoja","referencia":"LISA700","descripcion":"Hoja lisa blanca 700mm","precio":45.50,"unidad":"ud","pagina_origen":${inicio + 1},"aviso":""}]`;
+    const prompt = construirPrompt(inicio, fin);
 
     const respuesta = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -80,18 +58,14 @@ Ejemplo del formato esperado:
       },
       body: JSON.stringify({
         model: MODELO,
-        max_tokens: 8000,
+        max_tokens: 16000,
         messages: [
           {
             role: 'user',
             content: [
               {
                 type: 'document',
-                source: {
-                  type: 'base64',
-                  media_type: 'application/pdf',
-                  data: bloqueBase64,
-                },
+                source: { type: 'base64', media_type: 'application/pdf', data: bloqueBase64 },
               },
               { type: 'text', text: prompt },
             ],
@@ -103,10 +77,7 @@ Ejemplo del formato esperado:
     if (!respuesta.ok) {
       const textoError = await respuesta.text();
       return NextResponse.json(
-        {
-          error: `La IA devolvió un error (${respuesta.status})`,
-          detalle: textoError.substring(0, 300),
-        },
+        { error: `La IA devolvió un error (${respuesta.status})`, detalle: textoError.substring(0, 300) },
         { status: 502 }
       );
     }
@@ -125,23 +96,21 @@ Ejemplo del formato esperado:
         totalPaginas,
         paginaInicio: inicio,
         paginaFin: fin,
-        avisoParseo: 'La IA no devolvió un JSON válido para este bloque.',
-        muestra: contenido.substring(0, 300),
+        avisoParseo: 'La IA no devolvió un JSON válido en este bloque.',
+        muestra: contenido.substring(0, 400),
       });
     }
 
-    const categoriasValidas = ['hoja', 'cerco', 'tapeta', 'herraje', 'pernio', 'manilla', 'suplemento', 'otro'];
-    const unidadesValidas = ['ud', 'm2', 'ml', 'juego'];
-
     const itemsValidos = items.filter(
-      (item: any) =>
-        item &&
-        categoriasValidas.includes(item.categoria) &&
-        unidadesValidas.includes(item.unidad) &&
-        typeof item.precio === 'number' &&
-        item.precio > 0 &&
-        typeof item.descripcion === 'string' &&
-        item.descripcion.length > 0
+      (it: any) =>
+        it &&
+        CATEGORIAS.includes(it.categoria) &&
+        UNIDADES.includes(it.unidad) &&
+        TIPOS_PRECIO.includes(it.tipo_precio || 'fijo') &&
+        typeof it.precio === 'number' &&
+        it.precio > 0 &&
+        typeof it.descripcion === 'string' &&
+        it.descripcion.trim().length > 0
     );
 
     return NextResponse.json({
@@ -158,4 +127,104 @@ Ejemplo del formato esperado:
       { status: 500 }
     );
   }
+}
+
+function construirPrompt(inicio: number, fin: number): string {
+  return `Eres un extractor de precios de tarifas de fabricantes de puertas y armarios.
+Analizas las páginas ${inicio + 1} a ${fin + 1} de una tarifa de IMALASA.
+
+=== CÓMO ESTÁN MONTADAS ESTAS TABLAS ===
+
+No son listas de "concepto y precio". Son tablas que hay que DESPLEGAR.
+
+Estructura típica:
+- Un ENCABEZADO naranja nombra VARIOS MODELOS que comparten el mismo precio.
+  Ejemplo: "MOD. LAC 0.4, LAC 2.0, LAC 0.6 y LAC 0.2C" son CUATRO modelos.
+- Las FILAS son TIPOS de puerta (CIEGA, V1L, V3, Parrilla Enrasada V1, CARPELINO...).
+  Una fila puede agrupar VARIOS tipos: "V1L, V1C" son DOS tipos al mismo precio.
+- Las COLUMNAS son FORMATOS DE VENTA:
+  · BLOCK = puerta completa montada (hoja + cerco + tapetas + herraje)
+  · HOJA  = solo la puerta, sin marco ni herrajes
+  · KIT   = equivalente al BLOCK pero en tablas de armario
+- Algunas páginas parten las columnas en subcolumnas de VARIANTE:
+  "Ángulo Redondo / Ángulo Recto" o "Fresado 10º / Fresado Twin".
+  Cada subcolumna es un precio distinto.
+
+REGLA DE DESPLIEGUE, la más importante de todas:
+  nº modelos del encabezado × nº tipos de la fila × nº columnas con precio
+
+Ejemplo trabajado:
+  Encabezado: "MOD. LAC 0.4, LAC 2.0, LAC 0.6 y LAC 0.2C"  → 4 modelos
+  Fila:       "V1L, V1C    196,42 (BLOCK)    123,11 (HOJA)" → 2 tipos, 2 columnas
+  Resultado:  4 × 2 × 2 = 16 líneas de precio, no 2.
+
+Una página de tabla completa debe dar entre 40 y 80 líneas. Si sacas 3, estás fallando.
+
+=== CASILLAS VACÍAS ===
+
+Una casilla vacía es información, no un error de lectura. Significa que ese
+producto no se vende en ese formato. NO generes línea para casillas vacías.
+Ejemplos reales: CARPELINO nunca tiene BLOCK. ABATIBLE 2H nunca tiene HOJA.
+
+=== QUÉ CATEGORÍA PONER ===
+
+- "puerta"     → blocks y hojas de puertas de paso, blindadas, técnicas
+- "armario"    → frentes de armario abatibles y correderas (columnas KIT/HOJA)
+- "cerco"      → cercos sueltos vendidos por tira o metro
+- "tapeta"     → tapajuntas
+- "moldura"    → molduras
+- "rodapie"    → rodapiés
+- "herraje"    → cerraduras, picaportes, kits de corredera
+- "pernio"     → bisagras y pernios
+- "manilla"    → manillas
+- "suplemento" → incrementos y opciones que se SUMAN a un precio base
+- "otro"       → lo que no encaje
+
+=== INCREMENTOS Y PORCENTAJES ===
+
+Las páginas de "opciones e incrementos" no venden productos: modifican precios.
+Cada línea lleva un campo "tipo_precio":
+- "fijo"       → el número son euros. Ejemplo: burlete de goma +14,28 € → precio 14.28
+- "porcentaje" → el número son puntos porcentuales. Ejemplo: alto hasta 2400 +30% → precio 30
+
+En estos casos rellena también "aplica_a" explicando sobre qué se aplica.
+Ejemplos: "alto hasta 2400", "solo BLOCK", "colores oscuros", "puertas de paso".
+
+=== FORMATO DE SALIDA ===
+
+Devuelve SOLO un array JSON. Sin explicaciones, sin markdown, sin bloques de código.
+
+Cada objeto lleva:
+- categoria     : una de las de la lista de arriba
+- referencia    : código del producto si aparece, si no ""
+- descripcion   : descripción legible y COMPLETA. Debe bastar por sí sola para
+                  saber qué es. Ejemplo: "LAC 0.4 CIEGA - BLOCK"
+- atributos     : objeto con lo que caracteriza esta línea. Usa las claves que
+                  apliquen: modelo, tipo, formato, variante, medida, acabado.
+                  Ejemplo: {"modelo":"LAC 0.4","tipo":"CIEGA","formato":"BLOCK"}
+- precio        : número con punto decimal. "173,57" → 173.57
+- tipo_precio   : "fijo" o "porcentaje"
+- unidad        : "ud", "m2", "ml", "juego" o "tira"
+- aplica_a      : solo para suplementos. Si no aplica, ""
+- pagina_origen : número de página real del documento (entre ${inicio + 1} y ${fin + 1})
+- aviso         : si algo no se lee con seguridad, explícalo. Si está claro, ""
+
+=== REGLAS ===
+
+- No inventes precios. No interpoles. No redondees.
+- Los precios llevan coma decimal en el PDF: conviértela a punto.
+- Si una página dice "consultar precio" o "precios mediante presupuesto",
+  NO generes líneas para ella.
+- Si una página es portada, índice o fotos sin precios, devuelve [].
+- Prefiere desplegar de más a de menos: es mejor una línea de sobra que
+  una que falte.
+
+=== EJEMPLO DE SALIDA ===
+
+[
+  {"categoria":"puerta","referencia":"","descripcion":"LAC 0.4 CIEGA - BLOCK","atributos":{"modelo":"LAC 0.4","tipo":"CIEGA","formato":"BLOCK"},"precio":173.57,"tipo_precio":"fijo","unidad":"ud","aplica_a":"","pagina_origen":11,"aviso":""},
+  {"categoria":"puerta","referencia":"","descripcion":"LAC 0.4 CIEGA - HOJA","atributos":{"modelo":"LAC 0.4","tipo":"CIEGA","formato":"HOJA"},"precio":100.26,"tipo_precio":"fijo","unidad":"ud","aplica_a":"","pagina_origen":11,"aviso":""},
+  {"categoria":"armario","referencia":"","descripcion":"LAC 0.4 ABATIBLE 1H hasta 2400x600 - KIT","atributos":{"modelo":"LAC 0.4","tipo":"ABATIBLE 1H","formato":"KIT","medida":"2400x600"},"precio":146.49,"tipo_precio":"fijo","unidad":"ud","aplica_a":"","pagina_origen":11,"aviso":""},
+  {"categoria":"suplemento","referencia":"","descripcion":"Incremento por alto hasta 2400 mm","atributos":{},"precio":30,"tipo_precio":"porcentaje","unidad":"ud","aplica_a":"alto hasta 2400","pagina_origen":43,"aviso":""}
+]`;
 }

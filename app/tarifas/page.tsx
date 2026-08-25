@@ -3,7 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { createPriceList, getPriceLists, updatePriceListState, addPriceListItems } from '@/lib/price-lists';
+import {
+  createPriceList,
+  getPriceLists,
+  updatePriceListState,
+  addPriceListItems,
+  deleteAllItems,
+} from '@/lib/price-lists';
 
 const PAGINAS_POR_BLOQUE = 3;
 
@@ -25,10 +31,7 @@ export default function TarifasPage() {
     const cargar = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
-      if (user) {
-        const lista = await getPriceLists();
-        setTarifas(lista);
-      }
+      if (user) setTarifas(await getPriceLists());
       setLoading(false);
     };
     cargar();
@@ -85,14 +88,10 @@ export default function TarifasPage() {
     }
   };
 
-  // Convierte el PDF descargado en texto base64
   const aBase64 = (blob: Blob): Promise<string> =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        const resultado = reader.result as string;
-        resolve(resultado.split(',')[1]);
-      };
+      reader.onload = () => resolve((reader.result as string).split(',')[1]);
       reader.onerror = () => reject(new Error('No se pudo leer el PDF.'));
       reader.readAsDataURL(blob);
     });
@@ -109,13 +108,10 @@ export default function TarifasPage() {
     try {
       datos = JSON.parse(texto);
     } catch {
-      throw new Error('El servidor respondió algo inesperado: ' + texto.substring(0, 120));
+      throw new Error('Respuesta inesperada del servidor: ' + texto.substring(0, 120));
     }
 
-    if (!respuesta.ok) {
-      throw new Error(datos.error || 'Error en el servidor');
-    }
-
+    if (!respuesta.ok) throw new Error(datos.error || 'Error en el servidor');
     return datos;
   };
 
@@ -129,6 +125,9 @@ export default function TarifasPage() {
       const tarifa = tarifas.find((t) => t.id === tarifaId);
       if (!tarifa) throw new Error('No se encuentra la tarifa.');
 
+      // Borrar lo que hubiera de un intento anterior
+      await deleteAllItems(tarifaId);
+
       const { data, error: downloadError } = await supabase.storage
         .from('tarifas')
         .download(tarifa.file_path);
@@ -137,12 +136,10 @@ export default function TarifasPage() {
 
       const base64 = await aBase64(data!);
 
-      // Paso 1: preguntar cuántas páginas tiene
       setProgreso('Contando páginas...');
       const info = await llamarBloque({ pdfBase64: base64, soloContar: true });
       const totalPaginas = info.totalPaginas;
 
-      // Paso 2: recorrer bloque a bloque
       const bloques: { inicio: number; fin: number }[] = [];
       for (let i = 0; i < totalPaginas; i += PAGINAS_POR_BLOQUE) {
         bloques.push({
@@ -151,13 +148,14 @@ export default function TarifasPage() {
         });
       }
 
-      const todosLosItems: any[] = [];
+      let guardados = 0;
+      let conAviso = 0;
       const bloquesFallidos: any[] = [];
 
       for (let i = 0; i < bloques.length; i++) {
         const bloque = bloques[i];
         setProgreso(
-          `Procesando páginas ${bloque.inicio + 1}-${bloque.fin + 1} de ${totalPaginas} · bloque ${i + 1} de ${bloques.length} · ${todosLosItems.length} precios encontrados`
+          `Páginas ${bloque.inicio + 1}-${bloque.fin + 1} de ${totalPaginas} · bloque ${i + 1} de ${bloques.length} · ${guardados} precios guardados`
         );
 
         try {
@@ -166,7 +164,32 @@ export default function TarifasPage() {
             paginaInicio: bloque.inicio,
             paginaFin: bloque.fin,
           });
-          todosLosItems.push(...(resultado.items || []));
+
+          const items = resultado.items || [];
+          if (items.length === 0) continue;
+
+          const paraGuardar = items.map((item: any) => ({
+            price_list_id: tarifaId,
+            categoria: item.categoria,
+            referencia: item.referencia || null,
+            descripcion: item.descripcion,
+            atributos: item.atributos || {},
+            precio: item.precio,
+            tipo_precio: item.tipo_precio || 'fijo',
+            unidad: item.unidad,
+            aplica_a: item.aplica_a || null,
+            pagina_origen: item.pagina_origen || bloque.inicio + 1,
+            aviso: item.aviso || null,
+            revisado: false,
+          }));
+
+          // Guardar este bloque enseguida: si algo falla después, no se pierde
+          for (let j = 0; j < paraGuardar.length; j += 100) {
+            await addPriceListItems(paraGuardar.slice(j, j + 100));
+          }
+
+          guardados += paraGuardar.length;
+          conAviso += paraGuardar.filter((p: any) => p.aviso).length;
         } catch (errBloque: any) {
           bloquesFallidos.push({
             paginas: `${bloque.inicio + 1}-${bloque.fin + 1}`,
@@ -175,38 +198,15 @@ export default function TarifasPage() {
         }
       }
 
-      if (todosLosItems.length === 0) {
+      if (guardados === 0) {
         setError(
-          `No se extrajo ningún precio de las ${totalPaginas} páginas. ` +
-          (bloquesFallidos.length > 0
-            ? `Fallaron ${bloquesFallidos.length} bloques.`
-            : 'La IA no encontró precios reconocibles en este PDF.')
+          `No se guardó ningún precio de las ${totalPaginas} páginas.` +
+          (bloquesFallidos.length ? ` Fallaron ${bloquesFallidos.length} bloques.` : '')
         );
         setResumen({ totalPaginas, bloquesFallidos });
-        setProcesando(null);
         setProgreso('');
+        setProcesando(null);
         return;
-      }
-
-      // Paso 3: guardar en la base de datos
-      setProgreso(`Guardando ${todosLosItems.length} precios...`);
-
-      const paraGuardar = todosLosItems.map((item: any) => ({
-        price_list_id: tarifaId,
-        categoria: item.categoria,
-        referencia: item.referencia || null,
-        descripcion: item.descripcion,
-        atributos: {},
-        precio: item.precio,
-        unidad: item.unidad,
-        pagina_origen: item.pagina_origen || null,
-        aviso: item.aviso || null,
-        revisado: false,
-      }));
-
-      // Guardar de 100 en 100 para no saturar
-      for (let i = 0; i < paraGuardar.length; i += 100) {
-        await addPriceListItems(paraGuardar.slice(i, i + 100));
       }
 
       await updatePriceListState(tarifaId, 'pendiente_revision', {
@@ -215,21 +215,19 @@ export default function TarifasPage() {
         totalPaginas,
         bloquesTotales: bloques.length,
         bloquesFallidos,
-        itemsExtraidos: todosLosItems.length,
+        itemsExtraidos: guardados,
       });
 
       setTarifas(
-        tarifas.map((t) =>
-          t.id === tarifaId ? { ...t, estado: 'pendiente_revision' } : t
-        )
+        tarifas.map((t) => (t.id === tarifaId ? { ...t, estado: 'pendiente_revision' } : t))
       );
 
       setResumen({
         exito: true,
         totalPaginas,
-        itemsExtraidos: todosLosItems.length,
+        itemsExtraidos: guardados,
+        conAviso,
         bloquesFallidos,
-        conAviso: todosLosItems.filter((i: any) => i.aviso).length,
       });
       setProgreso('');
     } catch (err: any) {
@@ -251,7 +249,12 @@ export default function TarifasPage() {
       padding: '20px',
     }}>
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '20px',
+        }}>
           <h1 style={{ color: '#1a1612', margin: 0 }}>Gestión de Tarifas</h1>
           <button
             onClick={() => router.push('/')}
@@ -269,7 +272,6 @@ export default function TarifasPage() {
           </button>
         </div>
 
-        {/* SUBIR */}
         <div style={{
           background: 'white',
           padding: '20px',
@@ -281,7 +283,12 @@ export default function TarifasPage() {
             Subir nueva tarifa
           </h2>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '15px',
+            marginBottom: '15px',
+          }}>
             <div>
               <label style={{ fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
                 Fabricante
@@ -359,7 +366,6 @@ export default function TarifasPage() {
           )}
         </div>
 
-        {/* PROGRESO */}
         {progreso && (
           <div style={{
             background: '#e8f4fd',
@@ -377,7 +383,6 @@ export default function TarifasPage() {
           </div>
         )}
 
-        {/* ERROR */}
         {error && (
           <div style={{
             background: '#fdecea',
@@ -390,8 +395,7 @@ export default function TarifasPage() {
           </div>
         )}
 
-        {/* RESUMEN */}
-        {resumen && resumen.exito && (
+        {resumen?.exito && (
           <div style={{
             background: '#eafaf1',
             padding: '15px 20px',
@@ -403,14 +407,13 @@ export default function TarifasPage() {
               Extracción terminada
             </p>
             <p style={{ margin: 0, fontSize: '12px', color: '#1a1612' }}>
-              {resumen.itemsExtraidos} precios extraídos de {resumen.totalPaginas} páginas.
+              {resumen.itemsExtraidos} precios guardados de {resumen.totalPaginas} páginas.
               {resumen.conAviso > 0 && ` ${resumen.conAviso} necesitan revisión.`}
               {resumen.bloquesFallidos.length > 0 && ` ${resumen.bloquesFallidos.length} bloques fallaron.`}
             </p>
           </div>
         )}
 
-        {/* LISTA */}
         <div>
           <h2 style={{ color: '#1a1612', fontSize: '16px', margin: '0 0 15px 0' }}>
             Mis tarifas ({tarifas.length})

@@ -7,9 +7,7 @@ export async function createPriceList(
   file_path: string
 ) {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('No user logged in');
-
-  console.log('Creating price list for user:', user.id);
+  if (!user) throw new Error('No hay ninguna sesión iniciada.');
 
   const { data, error } = await supabase
     .from('price_lists')
@@ -25,12 +23,7 @@ export async function createPriceList(
     .select()
     .single();
 
-  if (error) {
-    console.error('Error creating price list:', error);
-    throw error;
-  }
-
-  console.log('Price list created:', data);
+  if (error) throw error;
   return data;
 }
 
@@ -89,8 +82,35 @@ export async function getPriceListItems(priceListId: string) {
   const { data, error } = await supabase
     .from('price_list_items')
     .select('*')
-    .eq('price_list_id', priceListId);
+    .eq('price_list_id', priceListId)
+    .order('pagina_origen', { ascending: true });
 
   if (error) throw error;
   return data || [];
+}
+
+// Borra los items de un rango de páginas, para poder reprocesar sin duplicar
+export async function deleteItemsByPageRange(
+  priceListId: string,
+  paginaInicio: number,
+  paginaFin: number
+) {
+  const { error } = await supabase
+    .from('price_list_items')
+    .delete()
+    .eq('price_list_id', priceListId)
+    .gte('pagina_origen', paginaInicio)
+    .lte('pagina_origen', paginaFin);
+
+  if (error) throw error;
+}
+
+// Borra todos los items de una tarifa
+export async function deleteAllItems(priceListId: string) {
+  const { error } = await supabase
+    .from('price_list_items')
+    .delete()
+    .eq('price_list_id', priceListId);
+
+  if (error) throw error;
 }
