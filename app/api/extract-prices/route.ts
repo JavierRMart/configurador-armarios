@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PDFDocument } from 'pdf-lib';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const PAGES_PER_BLOCK = 5; // Procesar 5 páginas por llamada a Claude
+const PAGES_PER_BLOCK = 3; // Procesar 3 páginas por llamada a Claude
 
 export async function POST(request: NextRequest) {
   try {
