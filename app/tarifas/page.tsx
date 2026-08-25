@@ -14,12 +14,13 @@ export default function TarifasPage() {
   const [nombre, setNombre] = useState('');
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
   const [error, setError] = useState('');
+  const [diagnostico, setDiagnostico] = useState<any>(null);
 
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
-      
+
       if (user) {
         const lista = await getPriceLists();
         setTarifas(lista);
@@ -49,12 +50,7 @@ export default function TarifasPage() {
 
       if (uploadError) throw uploadError;
 
-      const tarifa = await createPriceList(
-        fabricante,
-        nombre,
-        fecha,
-        filename
-      );
+      const tarifa = await createPriceList(fabricante, nombre, fecha, filename);
 
       setTarifas([tarifa, ...tarifas]);
       setFabricante('');
@@ -71,22 +67,13 @@ export default function TarifasPage() {
     if (!confirm('¿Eliminar esta tarifa? No se puede deshacer.')) return;
 
     try {
-      const tarifa = tarifas.find(t => t.id === tarifaId);
+      const tarifa = tarifas.find((t) => t.id === tarifaId);
       if (!tarifa) return;
 
-      // Eliminar el PDF de Storage
-      await supabase.storage
-        .from('tarifas')
-        .remove([tarifa.file_path]);
+      await supabase.storage.from('tarifas').remove([tarifa.file_path]);
+      await supabase.from('price_lists').delete().eq('id', tarifaId);
 
-      // Eliminar la tarifa de la base de datos
-      await supabase
-        .from('price_lists')
-        .delete()
-        .eq('id', tarifaId);
-
-      setTarifas(tarifas.filter(t => t.id !== tarifaId));
-      alert('Tarifa eliminada');
+      setTarifas(tarifas.filter((t) => t.id !== tarifaId));
     } catch (err: any) {
       setError('Error al eliminar: ' + (err.message || err));
     }
@@ -95,89 +82,68 @@ export default function TarifasPage() {
   const handleProcesar = async (tarifaId: string) => {
     setProcesando(tarifaId);
     setError('');
+    setDiagnostico(null);
 
     try {
-      const tarifa = tarifas.find(t => t.id === tarifaId);
+      const tarifa = tarifas.find((t) => t.id === tarifaId);
       if (!tarifa) throw new Error('Tarifa no encontrada');
 
-      // Descargar el PDF de Storage
       const { data, error: downloadError } = await supabase.storage
         .from('tarifas')
         .download(tarifa.file_path);
 
       if (downloadError) throw downloadError;
 
-      // Convertir a base64
       const reader = new FileReader();
       reader.onload = async (e) => {
         try {
           const base64 = (e.target?.result as string).split(',')[1];
 
-          // Llamar a la API de extracción
           const response = await fetch('/api/extract-prices', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              pdfBase64: base64,
-              pageStart: 1,
-              pageEnd: 50,
-            }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pdfBase64: base64 }),
           });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Error en la extracción');
-          }
 
           const result = await response.json();
-          const items = result.items || [];
 
-          // Validar y preparar items
-          const validItems = items
-            .filter((item: any) => {
-              return (
-                ['hoja', 'cerco', 'tapeta', 'herraje', 'pernio', 'manilla', 'suplemento', 'otro'].includes(item.categoria) &&
-                ['ud', 'm2', 'ml', 'juego'].includes(item.unidad) &&
-                typeof item.precio === 'number' &&
-                item.precio > 0
-              );
-            })
-            .map((item: any) => ({
-              price_list_id: tarifaId,
-              categoria: item.categoria,
-              referencia: item.referencia || null,
-              descripcion: item.descripcion,
-              atributos: {},
-              precio: item.precio,
-              unidad: item.unidad,
-              pagina_origen: item.pagina_origen,
-              aviso: item.aviso || null,
-              revisado: false,
-            }));
-
-          if (validItems.length === 0) {
-            throw new Error('No se extrajeron precios válidos del PDF');
+          if (!response.ok) {
+            throw new Error(result.error || 'Error en la extracción');
           }
 
-          // Guardar items en la base de datos
-          await addPriceListItems(validItems);
+          const items = result.items || [];
 
-          // Actualizar estado de la tarifa
-          await updatePriceListState(tarifaId, 'pendiente_revision', {
-            extraidos: validItems.length,
-            fecha: new Date().toISOString(),
-          });
+          if (items.length === 0) {
+            setDiagnostico(result);
+            setError('No se extrajeron precios válidos. Mira el diagnóstico abajo.');
+            setProcesando(null);
+            return;
+          }
 
-          // Actualizar en la UI
-          setTarifas(tarifas.map(t => 
-            t.id === tarifaId 
-              ? { ...t, estado: 'pendiente_revision' }
-              : t
-          ));
+          const paraGuardar = items.map((item: any) => ({
+            price_list_id: tarifaId,
+            categoria: item.categoria,
+            referencia: item.referencia || null,
+            descripcion: item.descripcion,
+            atributos: {},
+            precio: item.precio,
+            unidad: item.unidad,
+            pagina_origen: item.pagina_origen,
+            aviso: item.aviso || null,
+            revisado: false,
+          }));
 
-          alert(`✅ Se extrajeron ${validItems.length} precios correctamente.\n\nEstado: Pendiente de revisión`);
+          await addPriceListItems(paraGuardar);
+
+          await updatePriceListState(tarifaId, 'pendiente_revision', result.extraction || {});
+
+          setTarifas(
+            tarifas.map((t) =>
+              t.id === tarifaId ? { ...t, estado: 'pendiente_revision' } : t
+            )
+          );
+
+          alert(`Se extrajeron ${items.length} precios.\n\nEstado: Pendiente de revisión`);
         } catch (err: any) {
           setError('Error al procesar: ' + (err.message || err));
         } finally {
@@ -209,7 +175,6 @@ export default function TarifasPage() {
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
         <h1 style={{ color: '#1a1612' }}>Gestión de Tarifas</h1>
 
-        {/* FORMULARIO SUBIDA */}
         <div style={{
           background: 'white',
           padding: '20px',
@@ -290,26 +255,45 @@ export default function TarifasPage() {
               accept=".pdf"
               onChange={handleFileUpload}
               disabled={uploading}
-              style={{
-                fontSize: '12px',
-              }}
+              style={{ fontSize: '12px' }}
             />
           </div>
 
           {error && (
-            <p style={{ color: '#c0392b', fontSize: '12px', marginTop: '10px' }}>
-              {error}
-            </p>
+            <p style={{ color: '#c0392b', fontSize: '12px', marginTop: '10px' }}>{error}</p>
           )}
 
           {uploading && (
-            <p style={{ color: '#b08d57', fontSize: '12px', marginTop: '10px' }}>
-              Subiendo...
-            </p>
+            <p style={{ color: '#b08d57', fontSize: '12px', marginTop: '10px' }}>Subiendo...</p>
           )}
         </div>
 
-        {/* LISTA DE TARIFAS */}
+        {diagnostico && (
+          <div style={{
+            background: '#fff8e1',
+            padding: '20px',
+            borderRadius: '8px',
+            border: '2px solid #f39c12',
+            marginBottom: '30px',
+          }}>
+            <h3 style={{ margin: '0 0 15px 0', fontSize: '14px', color: '#1a1612' }}>
+              Diagnóstico de la extracción
+            </h3>
+            <pre style={{
+              background: '#fff',
+              padding: '15px',
+              borderRadius: '4px',
+              fontSize: '11px',
+              overflow: 'auto',
+              maxHeight: '400px',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}>
+              {JSON.stringify(diagnostico, null, 2)}
+            </pre>
+          </div>
+        )}
+
         <div>
           <h2 style={{ color: '#1a1612', fontSize: '16px', margin: '0 0 15px 0' }}>
             Mis tarifas ({tarifas.length})
@@ -329,7 +313,7 @@ export default function TarifasPage() {
                   padding: '15px',
                   borderBottom: '1px solid #d9cdb8',
                   display: 'grid',
-                  gridTemplateColumns: '200px 1fr 150px 150px 100px',
+                  gridTemplateColumns: '200px 1fr 150px 130px 110px',
                   gap: '15px',
                   alignItems: 'center',
                 }}>
@@ -353,22 +337,27 @@ export default function TarifasPage() {
                       borderRadius: '4px',
                       fontSize: '11px',
                       fontWeight: 'bold',
-                      background: tarifa.estado === 'activa' ? '#27ae60' : tarifa.estado === 'procesando' ? '#3498db' : '#f39c12',
+                      background:
+                        tarifa.estado === 'activa'
+                          ? '#27ae60'
+                          : tarifa.estado === 'procesando'
+                          ? '#3498db'
+                          : '#f39c12',
                       color: 'white',
                     }}>
                       {tarifa.estado}
                     </span>
                   </div>
-                  <button 
+                  <button
                     onClick={() => handleProcesar(tarifa.id)}
                     disabled={procesando === tarifa.id}
                     style={{
                       padding: '8px 12px',
-                      background: tarifa.estado === 'procesando' ? '#f39c12' : '#b08d57',
+                      background: '#b08d57',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
-                      cursor: tarifa.estado === 'procesando' ? 'default' : 'pointer',
+                      cursor: 'pointer',
                       fontSize: '12px',
                       fontWeight: 'bold',
                       opacity: procesando === tarifa.id ? 0.6 : 1,
@@ -376,7 +365,7 @@ export default function TarifasPage() {
                   >
                     {procesando === tarifa.id ? 'Procesando...' : 'Procesar'}
                   </button>
-                  <button 
+                  <button
                     onClick={() => handleEliminar(tarifa.id)}
                     style={{
                       padding: '8px 12px',
@@ -389,7 +378,7 @@ export default function TarifasPage() {
                       fontWeight: 'bold',
                     }}
                   >
-                    🗑️ Eliminar
+                    Eliminar
                   </button>
                 </div>
               ))}
