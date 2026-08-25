@@ -72,29 +72,45 @@ Ejemplo de respuesta:
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const errorText = await response.text();
+      console.error('Claude API error response:', errorText);
       return NextResponse.json(
-        { error: `Claude API error: ${error.message}` },
+        { error: `Claude API error: ${errorText}` },
         { status: response.status }
       );
     }
 
-    const data = await response.json();
-    const content = data.content[0]?.text || '';
+    const rawText = await response.text();
+    console.log('Claude raw response:', rawText);
 
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      console.error('Failed to parse Claude response:', rawText);
+      return NextResponse.json(
+        { error: 'No se pudo parsear la respuesta de Claude', raw: rawText },
+        { status: 400 }
+      );
+    }
+
+    const content = data.content[0]?.text || '';
+    
     let items = [];
     try {
       items = JSON.parse(content);
       if (!Array.isArray(items)) items = [];
     } catch (e) {
+      console.error('Failed to parse items JSON:', content);
       return NextResponse.json(
-        { error: 'No se pudo parsear la respuesta de Claude', raw: content },
+        { error: 'No se pudo parsear los items de la respuesta', raw: content },
         { status: 400 }
       );
     }
 
     return NextResponse.json({ items, pages: { start: pageStart, end: pageEnd } });
   } catch (error: any) {
+    console.error('Unexpected error in extract-prices:', error);
     return NextResponse.json(
       { error: error.message || 'Error desconocido' },
       { status: 500 }
