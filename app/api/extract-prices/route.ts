@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
       blocksProcessed: blocks.length - failedBlocks.length,
       failedBlocks,
       extraction: {
-        model: 'claude-opus-4-1',
+        model: 'claude-sonnet-5',
         date: new Date().toISOString(),
         totalPages,
         blocksProcessed: blocks.length - failedBlocks.length,
@@ -148,7 +148,7 @@ Ejemplo:
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-opus-4-1',
+      model: 'claude-sonnet-5',
       max_tokens: 4000,
       messages: [
         {
