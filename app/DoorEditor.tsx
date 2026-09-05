@@ -1,3 +1,8 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { getModelosDisponibles } from '@/lib/price-lists';
+
 const ALTOS = [2030, 2100, 2400];
 const ANCHOS = [625, 725, 825, 925];
 const CERCOS_BATIENTE = [80, 90, 100, 110, 120, 130, 140];
@@ -7,12 +12,39 @@ const PERNIOS_OPTS = ['INOX', 'NEGRO'];
 const HERRAJE_OPTS = ['INOX', 'NEGRO'];
 
 export default function DoorEditor({ puerta, onChange }: any) {
+  const [modelos, setModelos] = useState<string[]>([]);
+  const [cargandoModelos, setCargandoModelos] = useState(true);
+  const [errorModelos, setErrorModelos] = useState('');
+
+  // Carga los modelos de la tarifa al abrir el editor
+  useEffect(() => {
+    const cargar = async () => {
+      try {
+        const lista = await getModelosDisponibles();
+        setModelos(lista);
+      } catch (err: any) {
+        setErrorModelos('No se pudieron cargar los modelos');
+      } finally {
+        setCargandoModelos(false);
+      }
+    };
+    cargar();
+  }, []);
+
   const update = (field: string, value: any) => {
     onChange({ ...puerta, [field]: value });
   };
 
   const cercosDisponibles =
     puerta.subtipo === 'CORREDERA' ? CERCOS_CORREDERA : CERCOS_BATIENTE;
+
+  // Si el proyecto ya tenía un modelo escrito a mano que no está en la
+  // tarifa, lo añadimos a la lista para no perderlo
+  const modeloActual = puerta.modelo || '';
+  const listaModelos =
+    modeloActual && !modelos.includes(modeloActual)
+      ? [modeloActual, ...modelos]
+      : modelos;
 
   const labelStyle: any = {
     fontSize: '11px',
@@ -37,14 +69,39 @@ export default function DoorEditor({ puerta, onChange }: any) {
       {/* FILA 1: MODELO Y COLOR */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>
         <div>
-          <label style={labelStyle}>Modelo</label>
-          <input
-            type="text"
-            value={puerta.modelo}
+          <label style={labelStyle}>
+            Modelo{' '}
+            {!cargandoModelos && modelos.length > 0 && (
+              <span style={{ fontWeight: 'normal', textTransform: 'none' }}>
+                ({modelos.length} en tarifa)
+              </span>
+            )}
+          </label>
+          <select
+            value={modeloActual}
             onChange={(e) => update('modelo', e.target.value)}
-            placeholder="Ej: MO-2024"
+            disabled={cargandoModelos}
             style={inputStyle}
-          />
+          >
+            <option value="">
+              {cargandoModelos ? 'Cargando modelos...' : '— Selecciona modelo —'}
+            </option>
+            {listaModelos.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+          {errorModelos && (
+            <p style={{ color: '#c0392b', fontSize: '11px', margin: '4px 0 0 0' }}>
+              {errorModelos}
+            </p>
+          )}
+          {!cargandoModelos && !errorModelos && modelos.length === 0 && (
+            <p style={{ color: '#6b5d4f', fontSize: '11px', margin: '4px 0 0 0' }}>
+              No hay tarifas cargadas todavía
+            </p>
+          )}
         </div>
         <div>
           <label style={labelStyle}>Color</label>
@@ -132,7 +189,7 @@ export default function DoorEditor({ puerta, onChange }: any) {
           value={puerta.equipoInstalacion}
           onChange={(e) => update('equipoInstalacion', e.target.value)}
           placeholder="Notas sobre el equipo de instalación"
-          style={{...inputStyle, minHeight: '60px', fontFamily: 'Arial'}}
+          style={{ ...inputStyle, minHeight: '60px', fontFamily: 'Arial' }}
         />
       </div>
 

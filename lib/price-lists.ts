@@ -114,3 +114,23 @@ export async function deleteAllItems(priceListId: string) {
 
   if (error) throw error;
 }
+
+// Devuelve la lista de modelos distintos que hay en las tarifas cargadas.
+// Lee el campo "atributos" de cada precio y se queda con los modelos únicos.
+export async function getModelosDisponibles() {
+  const { data, error } = await supabase
+    .from('price_list_items')
+    .select('atributos');
+
+  if (error) throw error;
+
+  const modelos = new Set<string>();
+  for (const item of data || []) {
+    const modelo = item.atributos?.modelo;
+    if (modelo && modelo !== 'sin modelo') {
+      modelos.add(modelo);
+    }
+  }
+
+  return Array.from(modelos).sort();
+}

@@ -116,6 +116,13 @@ export default function TarifasPage() {
   };
 
   const handleProcesar = async (tarifaId: string) => {
+    const confirmado = confirm(
+      'Esto borrará TODOS los precios ya cargados de esta tarifa y los reemplazará ' +
+      'con lo que extraiga la IA del PDF. Si esta tarifa ya tiene precios verificados ' +
+      'a mano, se perderán. ¿Seguro que quieres continuar?'
+    );
+    if (!confirmado) return;
+
     setProcesando(tarifaId);
     setError('');
     setResumen(null);
