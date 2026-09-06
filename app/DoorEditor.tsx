@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getModelosDisponibles, getPrecioPuertaCiega } from '@/lib/price-lists';
+import {
+  getModelosPorFamilia,
+  getPrecioPuertaCiega,
+  getVidrierasDisponibles,
+} from '@/lib/price-lists';
 
 const ALTOS = [2030, 2100, 2400];
 const ANCHOS = [625, 725, 825, 925];
@@ -12,19 +16,34 @@ const PERNIOS_OPTS = ['INOX', 'NEGRO'];
 const HERRAJE_OPTS = ['INOX', 'NEGRO'];
 
 export default function DoorEditor({ puerta, onChange }: any) {
-  const [modelos, setModelos] = useState<string[]>([]);
+  const [porFamilia, setPorFamilia] = useState<Record<string, string[]>>({});
   const [cargandoModelos, setCargandoModelos] = useState(true);
   const [errorModelos, setErrorModelos] = useState('');
+  const [familiaSeleccionada, setFamiliaSeleccionada] = useState('');
 
   const [precioInfo, setPrecioInfo] = useState<{ precio: number; descripcion: string } | null>(null);
   const [cargandoPrecio, setCargandoPrecio] = useState(false);
 
-  // Carga los modelos de la tarifa al abrir el editor
+  const [vidrieras, setVidrieras] = useState<string[]>([]);
+  const [cargandoVidrieras, setCargandoVidrieras] = useState(false);
+
+  // Carga los modelos agrupados por familia al abrir el editor
   useEffect(() => {
     const cargar = async () => {
       try {
-        const lista = await getModelosDisponibles();
-        setModelos(lista);
+        const grupos = await getModelosPorFamilia();
+        setPorFamilia(grupos);
+
+        // Si la puerta ya tenía un modelo (proyecto guardado), averigua
+        // a qué familia pertenece para dejar el filtro ya puesto
+        if (puerta.modelo) {
+          for (const [familia, modelos] of Object.entries(grupos)) {
+            if (modelos.includes(puerta.modelo)) {
+              setFamiliaSeleccionada(familia);
+              break;
+            }
+          }
+        }
       } catch (err: any) {
         setErrorModelos('No se pudieron cargar los modelos');
       } finally {
@@ -32,10 +51,10 @@ export default function DoorEditor({ puerta, onChange }: any) {
       }
     };
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Solo sabemos calcular precio para CIEGA + BATIENTE por ahora.
-  // Vidriera y corredera necesitan decisiones pendientes con tu padre.
   useEffect(() => {
     const esCasoSoportado = puerta.tipo === 'CIEGA' && puerta.subtipo === 'BATIENTE';
     if (!esCasoSoportado || !puerta.modelo) {
@@ -59,6 +78,29 @@ export default function DoorEditor({ puerta, onChange }: any) {
     return () => { cancelado = true; };
   }, [puerta.modelo, puerta.tipo, puerta.subtipo]);
 
+  // Cuando el tipo es VIDRIERA, carga las vidrieras reales de ese modelo
+  useEffect(() => {
+    if (puerta.tipo !== 'VIDRIERA' || !puerta.modelo) {
+      setVidrieras([]);
+      return;
+    }
+
+    let cancelado = false;
+    setCargandoVidrieras(true);
+    getVidrierasDisponibles(puerta.modelo)
+      .then((lista) => {
+        if (!cancelado) setVidrieras(lista);
+      })
+      .catch(() => {
+        if (!cancelado) setVidrieras([]);
+      })
+      .finally(() => {
+        if (!cancelado) setCargandoVidrieras(false);
+      });
+
+    return () => { cancelado = true; };
+  }, [puerta.tipo, puerta.modelo]);
+
   const update = (field: string, value: any) => {
     onChange({ ...puerta, [field]: value });
   };
@@ -66,15 +108,26 @@ export default function DoorEditor({ puerta, onChange }: any) {
   const cercosDisponibles =
     puerta.subtipo === 'CORREDERA' ? CERCOS_CORREDERA : CERCOS_BATIENTE;
 
-  // Si el proyecto ya tenía un modelo escrito a mano que no está en la
-  // tarifa, lo añadimos a la lista para no perderlo
+  const familias = Object.keys(porFamilia).sort();
+  const modelosDeFamilia = familiaSeleccionada ? porFamilia[familiaSeleccionada] || [] : [];
+
+  // Si el proyecto ya tenía un modelo que no está en la familia elegida
+  // (o aún no hay familia elegida), lo añadimos para no perderlo de vista
   const modeloActual = puerta.modelo || '';
   const listaModelos =
-    modeloActual && !modelos.includes(modeloActual)
-      ? [modeloActual, ...modelos]
-      : modelos;
+    modeloActual && !modelosDeFamilia.includes(modeloActual)
+      ? [modeloActual, ...modelosDeFamilia]
+      : modelosDeFamilia;
 
   const esCasoSoportado = puerta.tipo === 'CIEGA' && puerta.subtipo === 'BATIENTE';
+
+  // Si el subtipo guardado no está entre las vidrieras reales del modelo
+  // (por ejemplo, quedó de un V-1/V-2 antiguo), lo añadimos para no perderlo
+  const subtipoActual = puerta.subtipo || '';
+  const listaVidrieras =
+    subtipoActual && vidrieras.length > 0 && !vidrieras.includes(subtipoActual)
+      ? [subtipoActual, ...vidrieras]
+      : vidrieras;
 
   const labelStyle: any = {
     fontSize: '11px',
@@ -94,27 +147,75 @@ export default function DoorEditor({ puerta, onChange }: any) {
     boxSizing: 'border-box',
   };
 
+  const bloqueTituloStyle: any = {
+    margin: '0 0 12px 0',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    color: '#1a1612',
+  };
+
+  const bloqueStyle: any = {
+    borderTop: '1px solid #d9cdb8',
+    paddingTop: '15px',
+    marginTop: '15px',
+  };
+
   return (
     <div style={{ fontSize: '13px', color: '#2D2823' }}>
-      {/* FILA 1: MODELO Y COLOR */}
+
+      {/* ===== BLOQUE 1: PRODUCTO ===== */}
+      <h3 style={bloqueTituloStyle}>PRODUCTO</h3>
+
+      {/* Familia de puerta */}
+      <div style={{ marginBottom: '15px' }}>
+        <label style={labelStyle}>Familia de puerta</label>
+        <select
+          value={familiaSeleccionada}
+          onChange={(e) => {
+            setFamiliaSeleccionada(e.target.value);
+            // Cambiar de familia invalida el modelo elegido hasta ahora
+            update('modelo', '');
+          }}
+          disabled={cargandoModelos}
+          style={inputStyle}
+        >
+          <option value="">
+            {cargandoModelos ? 'Cargando familias...' : '— Selecciona familia —'}
+          </option>
+          {familias.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+        {errorModelos && (
+          <p style={{ color: '#c0392b', fontSize: '11px', margin: '4px 0 0 0' }}>
+            {errorModelos}
+          </p>
+        )}
+      </div>
+
+      {/* Modelo y Color */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>
         <div>
           <label style={labelStyle}>
             Modelo{' '}
-            {!cargandoModelos && modelos.length > 0 && (
+            {familiaSeleccionada && modelosDeFamilia.length > 0 && (
               <span style={{ fontWeight: 'normal', textTransform: 'none' }}>
-                ({modelos.length} en tarifa)
+                ({modelosDeFamilia.length} en {familiaSeleccionada})
               </span>
             )}
           </label>
           <select
             value={modeloActual}
             onChange={(e) => update('modelo', e.target.value)}
-            disabled={cargandoModelos}
+            disabled={cargandoModelos || !familiaSeleccionada}
             style={inputStyle}
           >
             <option value="">
-              {cargandoModelos ? 'Cargando modelos...' : '— Selecciona modelo —'}
+              {!familiaSeleccionada
+                ? 'Elige primero una familia'
+                : '— Selecciona modelo —'}
             </option>
             {listaModelos.map((m) => (
               <option key={m} value={m}>
@@ -122,16 +223,6 @@ export default function DoorEditor({ puerta, onChange }: any) {
               </option>
             ))}
           </select>
-          {errorModelos && (
-            <p style={{ color: '#c0392b', fontSize: '11px', margin: '4px 0 0 0' }}>
-              {errorModelos}
-            </p>
-          )}
-          {!cargandoModelos && !errorModelos && modelos.length === 0 && (
-            <p style={{ color: '#6b5d4f', fontSize: '11px', margin: '4px 0 0 0' }}>
-              No hay tarifas cargadas todavía
-            </p>
-          )}
         </div>
         <div>
           <label style={labelStyle}>Color</label>
@@ -145,7 +236,68 @@ export default function DoorEditor({ puerta, onChange }: any) {
         </div>
       </div>
 
-      {/* PRECIO ESTIMADO — solo caso CIEGA + BATIENTE por ahora */}
+      {/* Tipo y Subtipo / Tipo de vidriera */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>
+        <div>
+          <label style={labelStyle}>Tipo</label>
+          <select
+            value={puerta.tipo}
+            onChange={(e) => {
+              const nuevoTipo = e.target.value;
+              const nuevoSubtipo = nuevoTipo === 'CIEGA' ? 'BATIENTE' : '';
+              onChange({ ...puerta, tipo: nuevoTipo, subtipo: nuevoSubtipo });
+            }}
+            style={inputStyle}
+          >
+            <option value="CIEGA">Ciega</option>
+            <option value="VIDRIERA">Vidriera</option>
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>
+            {puerta.tipo === 'VIDRIERA' ? 'Tipo de vidriera' : 'Subtipo'}
+          </label>
+          {puerta.tipo === 'CIEGA' ? (
+            <select
+              value={puerta.subtipo}
+              onChange={(e) => update('subtipo', e.target.value)}
+              style={inputStyle}
+            >
+              <option value="BATIENTE">Batiente</option>
+              <option value="CORREDERA">Corredera</option>
+            </select>
+          ) : (
+            <>
+              <select
+                value={subtipoActual}
+                onChange={(e) => update('subtipo', e.target.value)}
+                disabled={cargandoVidrieras || !puerta.modelo}
+                style={inputStyle}
+              >
+                <option value="">
+                  {!puerta.modelo
+                    ? 'Elige primero un modelo'
+                    : cargandoVidrieras
+                    ? 'Cargando vidrieras...'
+                    : '— Selecciona vidriera —'}
+                </option>
+                {listaVidrieras.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+              {!cargandoVidrieras && puerta.modelo && vidrieras.length === 0 && (
+                <p style={{ color: '#c0392b', fontSize: '11px', margin: '4px 0 0 0' }}>
+                  Este modelo no tiene vidrieras en la tarifa.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Precio estimado — solo caso CIEGA + BATIENTE por ahora */}
       {puerta.modelo && (
         <div style={{
           background: '#f5f1e8',
@@ -173,197 +325,157 @@ export default function DoorEditor({ puerta, onChange }: any) {
         </div>
       )}
 
-      {/* FILA 2: CERCO Y BURLETE */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>
-        <div>
-          <label style={labelStyle}>Cerco</label>
-          <select value={puerta.cerco} onChange={(e) => update('cerco', e.target.value)} style={inputStyle}>
-            <option value="con">Con Burlete</option>
-            <option value="sin">Sin Burlete</option>
-          </select>
+      {/* ===== BLOQUE 2: HERRAJES Y ACABADOS ===== */}
+      <div style={bloqueStyle}>
+        <h3 style={bloqueTituloStyle}>HERRAJES Y ACABADOS</h3>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>
+          <div>
+            <label style={labelStyle}>Cerco</label>
+            <select value={puerta.cerco} onChange={(e) => update('cerco', e.target.value)} style={inputStyle}>
+              <option value="con">Con Burlete</option>
+              <option value="sin">Sin Burlete</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Tapetas (mm)</label>
+            <select value={puerta.tapetas} onChange={(e) => update('tapetas', e.target.value)} style={inputStyle}>
+              {TAPETAS_OPTS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div>
+            <label style={labelStyle}>Pernios</label>
+            <select value={puerta.pernios} onChange={(e) => update('pernios', e.target.value)} style={inputStyle}>
+              {PERNIOS_OPTS.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Herraje</label>
+            <select value={puerta.herraje} onChange={(e) => update('herraje', e.target.value)} style={inputStyle}>
+              {HERRAJE_OPTS.map((h) => (
+                <option key={h} value={h}>
+                  {h}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== BLOQUE 3: MEDIDAS DE LA PUERTA ===== */}
+      <div style={bloqueStyle}>
+        <h3 style={bloqueTituloStyle}>MEDIDAS DE LA PUERTA</h3>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>
+          <div>
+            <label style={labelStyle}>Ubicación</label>
+            <input
+              type="text"
+              value={puerta.ubicacion}
+              onChange={(e) => update('ubicacion', e.target.value)}
+              placeholder="Ej: Dormitorio 1"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Unidades</label>
+            <input
+              type="number"
+              min="1"
+              value={puerta.unidades}
+              onChange={(e) => update('unidades', Number(e.target.value))}
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '15px' }}>
+          <div>
+            <label style={labelStyle}>Alto (mm)</label>
+            <select value={puerta.alto} onChange={(e) => update('alto', Number(e.target.value))} style={inputStyle}>
+              {ALTOS.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Ancho (mm)</label>
+            <select value={puerta.ancho} onChange={(e) => update('ancho', Number(e.target.value))} style={inputStyle}>
+              {ANCHOS.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Cerco (mm)</label>
+            <select value={puerta.anchoCerco} onChange={(e) => update('anchoCerco', Number(e.target.value))} style={inputStyle}>
+              {cercosDisponibles.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div>
-          <label style={labelStyle}>Tapetas (mm)</label>
-          <select value={puerta.tapetas} onChange={(e) => update('tapetas', e.target.value)} style={inputStyle}>
-            {TAPETAS_OPTS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
+          <label style={labelStyle}>Apertura</label>
+          <select value={puerta.apertura} onChange={(e) => update('apertura', e.target.value)} style={inputStyle}>
+            <option value="derecha">A derechas</option>
+            <option value="izquierda">A izquierdas</option>
           </select>
         </div>
       </div>
 
-      {/* FILA 3: PERNIOS Y HERRAJE */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>
-        <div>
-          <label style={labelStyle}>Pernios</label>
-          <select value={puerta.pernios} onChange={(e) => update('pernios', e.target.value)} style={inputStyle}>
-            {PERNIOS_OPTS.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Herraje</label>
-          <select value={puerta.herraje} onChange={(e) => update('herraje', e.target.value)} style={inputStyle}>
-            {HERRAJE_OPTS.map((h) => (
-              <option key={h} value={h}>
-                {h}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      {/* ===== BLOQUE 4: INSTALACIÓN ===== */}
+      <div style={bloqueStyle}>
+        <h3 style={bloqueTituloStyle}>INSTALACIÓN</h3>
 
-      {/* FILA 4: FECHAS */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>
+          <div>
+            <label style={labelStyle}>Fecha Medición</label>
+            <input
+              type="date"
+              value={puerta.fechaMedicion}
+              onChange={(e) => update('fechaMedicion', e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Fecha Instalación</label>
+            <input
+              type="date"
+              value={puerta.fechaInstalacion}
+              onChange={(e) => update('fechaInstalacion', e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
         <div>
-          <label style={labelStyle}>Fecha Medición</label>
-          <input
-            type="date"
-            value={puerta.fechaMedicion}
-            onChange={(e) => update('fechaMedicion', e.target.value)}
-            style={inputStyle}
+          <label style={labelStyle}>Equipo Instalación</label>
+          <textarea
+            value={puerta.equipoInstalacion}
+            onChange={(e) => update('equipoInstalacion', e.target.value)}
+            placeholder="Notas sobre el equipo de instalación"
+            style={{ ...inputStyle, minHeight: '60px', fontFamily: 'Arial' }}
           />
         </div>
-        <div>
-          <label style={labelStyle}>Fecha Instalación</label>
-          <input
-            type="date"
-            value={puerta.fechaInstalacion}
-            onChange={(e) => update('fechaInstalacion', e.target.value)}
-            style={inputStyle}
-          />
-        </div>
-      </div>
-
-      {/* EQUIPO INSTALACION */}
-      <div style={{ marginBottom: '15px' }}>
-        <label style={labelStyle}>Equipo Instalación</label>
-        <textarea
-          value={puerta.equipoInstalacion}
-          onChange={(e) => update('equipoInstalacion', e.target.value)}
-          placeholder="Notas sobre el equipo de instalación"
-          style={{ ...inputStyle, minHeight: '60px', fontFamily: 'Arial' }}
-        />
-      </div>
-
-      {/* SEPARATOR */}
-      <div style={{ borderTop: '1px solid #d9cdb8', margin: '15px 0', paddingTop: '15px' }}>
-        <h3 style={{ margin: '0 0 12px 0', fontSize: '12px', fontWeight: 'bold', color: '#1a1612' }}>
-          MEDIDAS DE LA PUERTA
-        </h3>
-      </div>
-
-      {/* FILA 5: UBICACIÓN Y UNIDADES */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>
-        <div>
-          <label style={labelStyle}>Ubicación</label>
-          <input
-            type="text"
-            value={puerta.ubicacion}
-            onChange={(e) => update('ubicacion', e.target.value)}
-            placeholder="Ej: Dormitorio 1"
-            style={inputStyle}
-          />
-        </div>
-        <div>
-          <label style={labelStyle}>Unidades</label>
-          <input
-            type="number"
-            min="1"
-            value={puerta.unidades}
-            onChange={(e) => update('unidades', Number(e.target.value))}
-            style={inputStyle}
-          />
-        </div>
-      </div>
-
-      {/* FILA 6: TIPO Y SUBTIPO */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>
-        <div>
-          <label style={labelStyle}>Tipo</label>
-          <select
-            value={puerta.tipo}
-            onChange={(e) => {
-              const nuevoTipo = e.target.value;
-              const nuevoSubtipo = nuevoTipo === 'CIEGA' ? 'BATIENTE' : 'V-1';
-              onChange({ ...puerta, tipo: nuevoTipo, subtipo: nuevoSubtipo });
-            }}
-            style={inputStyle}
-          >
-            <option value="CIEGA">Ciega</option>
-            <option value="VIDRIERA">Vidriera</option>
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Subtipo</label>
-          <select
-            value={puerta.subtipo}
-            onChange={(e) => update('subtipo', e.target.value)}
-            style={inputStyle}
-          >
-            {puerta.tipo === 'CIEGA' ? (
-              <>
-                <option value="BATIENTE">Batiente</option>
-                <option value="CORREDERA">Corredera</option>
-              </>
-            ) : (
-              <>
-                <option value="V-1">V-1</option>
-                <option value="V-2">V-2</option>
-                <option value="V-3">V-3</option>
-                <option value="V-4">V-4</option>
-              </>
-            )}
-          </select>
-        </div>
-      </div>
-
-      {/* FILA 7: MEDIDAS PRINCIPALES */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '15px' }}>
-        <div>
-          <label style={labelStyle}>Alto (mm)</label>
-          <select value={puerta.alto} onChange={(e) => update('alto', Number(e.target.value))} style={inputStyle}>
-            {ALTOS.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Ancho (mm)</label>
-          <select value={puerta.ancho} onChange={(e) => update('ancho', Number(e.target.value))} style={inputStyle}>
-            {ANCHOS.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Cerco (mm)</label>
-          <select value={puerta.anchoCerco} onChange={(e) => update('anchoCerco', Number(e.target.value))} style={inputStyle}>
-            {cercosDisponibles.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* FILA 8: APERTURA */}
-      <div style={{ marginBottom: '15px' }}>
-        <label style={labelStyle}>Apertura</label>
-        <select value={puerta.apertura} onChange={(e) => update('apertura', e.target.value)} style={inputStyle}>
-          <option value="derecha">A derechas</option>
-          <option value="izquierda">A izquierdas</option>
-        </select>
       </div>
     </div>
   );

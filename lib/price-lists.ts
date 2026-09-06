@@ -159,3 +159,58 @@ export async function updateDescuento(priceListId: string, descuento: number) {
 
   if (error) throw error;
 }
+
+// Devuelve los tipos de vidriera disponibles para un modelo concreto.
+// Son todos los "tipo" de ese modelo excepto CIEGA (que no es vidriera).
+export async function getVidrierasDisponibles(modelo: string) {
+  if (!modelo) return [];
+
+  const { data, error } = await supabase
+    .from('price_list_items')
+    .select('atributos')
+    .contains('atributos', { modelo });
+
+  if (error) throw error;
+
+  const vidrieras = new Set<string>();
+  for (const item of data || []) {
+    const tipo = item.atributos?.tipo;
+    // Excluye lo que no es vidriera: la puerta ciega y componentes sueltos
+    if (tipo && tipo !== 'CIEGA' && !tipo.includes('CARPELINO')) {
+      vidrieras.add(tipo);
+    }
+  }
+
+  return Array.from(vidrieras).sort();
+}
+
+// Devuelve los modelos agrupados por familia de puerta (Lisa, Pantografiada, Fresada).
+// Cada modelo aparece en su familia junto con la lista de familias disponibles.
+export async function getModelosPorFamilia() {
+  const { data, error } = await supabase
+    .from('price_list_items')
+    .select('atributos');
+
+  if (error) throw error;
+
+  const familiaDeModelo = new Map<string, string>();
+  for (const item of data || []) {
+    const modelo = item.atributos?.modelo;
+    const familia = item.atributos?.familia;
+    if (modelo && modelo !== 'sin modelo' && familia) {
+      familiaDeModelo.set(modelo, familia);
+    }
+  }
+
+  const porFamilia: Record<string, string[]> = {};
+  for (const [modelo, familia] of familiaDeModelo.entries()) {
+    if (!porFamilia[familia]) porFamilia[familia] = [];
+    porFamilia[familia].push(modelo);
+  }
+
+  for (const familia in porFamilia) {
+    porFamilia[familia].sort();
+  }
+
+  return porFamilia;
+}
