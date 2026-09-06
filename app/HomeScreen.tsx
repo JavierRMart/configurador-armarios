@@ -121,6 +121,22 @@ export default function HomeScreen() {
           </button>
 
           <button
+            onClick={() => router.push('/empresa')}
+            style={{
+              background: '#6b5d4f',
+              color: 'white',
+              border: 'none',
+              padding: '15px 30px',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
+          >
+            🏢 Datos de la Empresa
+          </button>
+
+          <button
             onClick={handleLogout}
             style={{
               background: '#c0392b',

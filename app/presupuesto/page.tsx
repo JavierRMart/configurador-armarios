@@ -4,13 +4,18 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getProject } from '@/lib/projects';
+import { getDatosEmpresa, DatosEmpresa } from '@/lib/empresa';
 import { calcularPresupuestoProyecto, ResumenPresupuesto } from '@/lib/presupuestos';
+import ExportPresupuestoPDF from '../ExportPresupuestoPDF';
 
 export default function PresupuestoPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [proyectoId, setProyectoId] = useState('');
   const [nombreProyecto, setNombreProyecto] = useState('');
+  const [projectData, setProjectData] = useState<any>(null);
+  const [empresa, setEmpresa] = useState<DatosEmpresa | null>(null);
   const [resumen, setResumen] = useState<ResumenPresupuesto | null>(null);
   const [error, setError] = useState('');
 
@@ -24,17 +29,19 @@ export default function PresupuestoPage() {
       }
 
       const params = new URLSearchParams(window.location.search);
-      const proyectoId = params.get('proyecto');
+      const idDeLaUrl = params.get('proyecto');
 
-      if (!proyectoId) {
+      if (!idDeLaUrl) {
         setError('Falta el proyecto. Abre esta pantalla desde "Mis proyectos".');
         setLoading(false);
         return;
       }
 
       try {
-        const proyecto = await getProject(proyectoId);
+        const proyecto = await getProject(idDeLaUrl);
+        setProyectoId(proyecto.id);
         setNombreProyecto(proyecto.nombre);
+        setProjectData(proyecto.config?.projectData || {});
 
         const puertas = proyecto.config?.puertas || [];
         if (puertas.length === 0) {
@@ -43,8 +50,13 @@ export default function PresupuestoPage() {
           return;
         }
 
-        const resultado = await calcularPresupuestoProyecto(puertas);
+        const [resultado, datosEmpresa] = await Promise.all([
+          calcularPresupuestoProyecto(puertas),
+          getDatosEmpresa(),
+        ]);
+
         setResumen(resultado);
+        setEmpresa(datosEmpresa);
       } catch (err: any) {
         setError('No se pudo calcular el presupuesto: ' + (err.message || err));
       } finally {
@@ -134,16 +146,21 @@ export default function PresupuestoPage() {
                     <p style={{ margin: 0, fontSize: '12px', color: '#6b5d4f' }}>
                       {linea.tipo} / {linea.subtipo} · {linea.unidades} ud.
                     </p>
+                    {linea.soportado && (
+                      <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#6b5d4f' }}>
+                        {linea.color && `Color: ${linea.color} · `}
+                        {linea.cerco} · Tapetas {linea.tapetas} · Pernios {linea.pernios} · Herraje {linea.herraje}
+                      </p>
+                    )}
                   </div>
 
                   {linea.soportado ? (
-                    <div style={{ textAlign: 'right' }}>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       <p style={{ margin: 0, fontWeight: 'bold', fontSize: '14px', color: '#1a1612' }}>
                         {formatoEuro(linea.subtotal || 0)}
                       </p>
                       <p style={{ margin: 0, fontSize: '11px', color: '#6b5d4f' }}>
                         {formatoEuro(linea.precioUnitario || 0)} / ud.
-                        {linea.descuentoPorcentaje ? ` (tarifa ${formatoEuro(linea.precioTarifa || 0)}, −${linea.descuentoPorcentaje}%)` : ''}
                       </p>
                     </div>
                   ) : (
@@ -166,24 +183,48 @@ export default function PresupuestoPage() {
               borderRadius: '8px',
               border: '2px solid #b08d57',
               padding: '20px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
+              marginBottom: '20px',
             }}>
-              <div>
-                <p style={{ margin: 0, fontSize: '13px', color: '#6b5d4f' }}>
-                  {resumen.cantidadSoportadas} de {resumen.lineas.length} puertas calculadas
-                  {resumen.cantidadNoSoportadas > 0 &&
-                    ` · ${resumen.cantidadNoSoportadas} pendientes de definir`}
+              {resumen.cantidadNoSoportadas > 0 && (
+                <p style={{ margin: '0 0 15px 0', fontSize: '12px', color: '#6b5d4f' }}>
+                  {resumen.cantidadSoportadas} de {resumen.lineas.length} puertas calculadas ·
+                  {' '}{resumen.cantidadNoSoportadas} pendientes de definir
                 </p>
-                <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#6b5d4f' }}>
-                  Ya incluye el descuento de tarifa
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#6b5d4f', marginBottom: '6px' }}>
+                <span>Base imponible</span>
+                <span>{formatoEuro(resumen.subtotalSinIva)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#6b5d4f', marginBottom: '12px' }}>
+                <span>IVA ({resumen.ivaPorcentaje}%)</span>
+                <span>{formatoEuro(resumen.cantidadIva)}</span>
+              </div>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingTop: '12px',
+                borderTop: '1px solid #d9cdb8',
+              }}>
+                <p style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#1a1612' }}>
+                  Total
+                </p>
+                <p style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#1a1612' }}>
+                  {formatoEuro(resumen.totalConIva)}
                 </p>
               </div>
-              <p style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#1a1612' }}>
-                {formatoEuro(resumen.total)}
-              </p>
             </div>
+
+            {resumen.cantidadSoportadas > 0 && empresa && (
+              <ExportPresupuestoPDF
+                proyectoId={proyectoId}
+                nombreProyecto={nombreProyecto}
+                empresa={empresa}
+                projectData={projectData}
+                resumen={resumen}
+              />
+            )}
           </>
         )}
       </div>

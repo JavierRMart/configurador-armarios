@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getMargenPorCategoria } from './margenes';
 
 // Traduce una puerta del configurador al vocabulario de la tarifa de Imalasa.
 // Devuelve null si esa combinación todavía no está soportada.
@@ -21,16 +22,24 @@ export type LineaPresupuesto = {
   modelo: string;
   tipo: string;
   subtipo: string;
+  color: string;
+  cerco: string;
+  tapetas: string;
+  pernios: string;
+  herraje: string;
   unidades: number;
   soportado: boolean;
   motivo?: string;
   precioTarifa?: number;
   descuentoPorcentaje?: number;
+  margenPorcentaje?: number;
   precioUnitario?: number;
   subtotal?: number;
 };
 
-// Calcula el precio de UNA puerta, ya con el descuento de su tarifa aplicado.
+// Calcula el precio de UNA puerta:
+// precio de tarifa -> menos el descuento del proveedor -> más el margen
+// de la familia (puerta/armario) -> precio unitario al cliente.
 export async function calcularPrecioPuerta(puerta: any): Promise<LineaPresupuesto> {
   const base: LineaPresupuesto = {
     puertaId: puerta.id,
@@ -38,6 +47,11 @@ export async function calcularPrecioPuerta(puerta: any): Promise<LineaPresupuest
     modelo: puerta.modelo || '(sin modelo)',
     tipo: puerta.tipo,
     subtipo: puerta.subtipo,
+    color: puerta.color || '',
+    cerco: puerta.cerco === 'con' ? 'Con burlete' : 'Sin burlete',
+    tapetas: puerta.tapetas || '',
+    pernios: puerta.pernios || '',
+    herraje: puerta.herraje || '',
     unidades: puerta.unidades || 1,
     soportado: false,
   };
@@ -71,8 +85,7 @@ export async function calcularPrecioPuerta(puerta: any): Promise<LineaPresupuest
   const precioTarifa = data[0].precio;
   const priceListId = data[0].price_list_id;
 
-  // Buscamos el descuento propio de esa tarifa. Si por lo que sea no se
-  // encuentra, seguimos sin descuento antes que romper el cálculo.
+  // Descuento propio de la tarifa (el que negocia tu padre con el proveedor)
   const { data: tarifaData } = await supabase
     .from('price_lists')
     .select('descuento_porcentaje')
@@ -80,7 +93,12 @@ export async function calcularPrecioPuerta(puerta: any): Promise<LineaPresupuest
     .single();
 
   const descuentoPorcentaje = tarifaData?.descuento_porcentaje ?? 0;
-  const precioUnitario = precioTarifa * (1 - descuentoPorcentaje / 100);
+  const costeTrasDescuento = precioTarifa * (1 - descuentoPorcentaje / 100);
+
+  // Margen de la familia de producto (lo que tu padre añade para vender)
+  const margenPorcentaje = await getMargenPorCategoria('puerta');
+  const precioUnitario = costeTrasDescuento * (1 + margenPorcentaje / 100);
+
   const subtotal = precioUnitario * base.unidades;
 
   return {
@@ -88,6 +106,7 @@ export async function calcularPrecioPuerta(puerta: any): Promise<LineaPresupuest
     soportado: true,
     precioTarifa,
     descuentoPorcentaje,
+    margenPorcentaje,
     precioUnitario,
     subtotal,
   };
@@ -95,18 +114,35 @@ export async function calcularPrecioPuerta(puerta: any): Promise<LineaPresupuest
 
 export type ResumenPresupuesto = {
   lineas: LineaPresupuesto[];
-  total: number;
+  subtotalSinIva: number;
+  ivaPorcentaje: number;
+  cantidadIva: number;
+  totalConIva: number;
   cantidadSoportadas: number;
   cantidadNoSoportadas: number;
 };
 
-// Calcula el presupuesto de TODAS las puertas de un proyecto.
+const IVA_PORCENTAJE = 21;
+
+// Calcula el presupuesto de TODAS las puertas de un proyecto, con el
+// desglose de IVA que va en el documento final.
 export async function calcularPresupuestoProyecto(puertas: any[]): Promise<ResumenPresupuesto> {
   const lineas = await Promise.all(puertas.map((p) => calcularPrecioPuerta(p)));
 
-  const total = lineas.reduce((suma, l) => suma + (l.subtotal || 0), 0);
+  const subtotalSinIva = lineas.reduce((suma, l) => suma + (l.subtotal || 0), 0);
+  const cantidadIva = subtotalSinIva * (IVA_PORCENTAJE / 100);
+  const totalConIva = subtotalSinIva + cantidadIva;
+
   const cantidadSoportadas = lineas.filter((l) => l.soportado).length;
   const cantidadNoSoportadas = lineas.length - cantidadSoportadas;
 
-  return { lineas, total, cantidadSoportadas, cantidadNoSoportadas };
+  return {
+    lineas,
+    subtotalSinIva,
+    ivaPorcentaje: IVA_PORCENTAJE,
+    cantidadIva,
+    totalConIva,
+    cantidadSoportadas,
+    cantidadNoSoportadas,
+  };
 }
