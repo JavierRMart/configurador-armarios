@@ -103,6 +103,8 @@ export default function Configurador() {
   const [projectData, setProjectData] = useState({
     clientName: 'Mi Cliente',
     address: 'Dirección',
+    email: '',
+    telefono: '',
     budget: 0,
     date: new Date().toISOString().split('T')[0],
   });
@@ -500,6 +502,44 @@ export default function Configurador() {
           </div>
           <div>
             <label style={{ fontSize: '11px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+              EMAIL
+            </label>
+            <input
+              type="email"
+              value={projectData.email}
+              onChange={(e) => setProjectData({ ...projectData, email: e.target.value })}
+              placeholder="cliente@email.com"
+              style={{
+                width: '100%',
+                padding: '8px',
+                fontSize: '12px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '11px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+              TELÉFONO
+            </label>
+            <input
+              type="text"
+              value={projectData.telefono}
+              onChange={(e) => setProjectData({ ...projectData, telefono: e.target.value })}
+              placeholder="600 000 000"
+              style={{
+                width: '100%',
+                padding: '8px',
+                fontSize: '12px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '11px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
               FECHA
             </label>
             <input
@@ -540,32 +580,40 @@ export default function Configurador() {
             </div>
 
             {armarios.map((armario) => (
-              <div key={armario.id} style={{
-                background: 'white',
-                padding: '20px',
-                borderRadius: '8px',
-                border: '1px solid #d9cdb8',
-                marginBottom: '20px',
-                display: 'grid',
-                gridTemplateColumns: '400px 1fr',
-                gap: '30px',
-              }}>
-                {/* COLUMNA IZQUIERDA: SVG FIJO */}
-                <div style={{
-                  background: '#faf7f2',
-                  padding: '15px',
-                  borderRadius: '4px',
+              <div
+                key={armario.id}
+                style={{
+                  background: 'white',
+                  borderRadius: '8px',
                   border: '1px solid #d9cdb8',
-                  position: 'sticky',
-                  top: '20px',
-                  height: 'fit-content',
-                }}>
+                  marginBottom: '20px',
+                  padding: '20px',
+                  display: 'grid',
+                  gridTemplateColumns: '320px 1fr',
+                  gap: '30px',
+                }}
+              >
+                <div>
+                  <input
+                    type="text"
+                    value={armario.ubicacion}
+                    onChange={(e) => actualizarArmario(armario.id, 'ubicacion', e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      border: '1px solid #ccc',
+                      borderRadius: '4px',
+                      marginBottom: '15px',
+                      boxSizing: 'border-box',
+                    }}
+                  />
                   <CabinetSVG armario={armario} />
                 </div>
 
-                {/* COLUMNA DERECHA: FORMULARIOS SCROLLEABLES */}
                 <div style={{
-                  maxHeight: '700px',
+                  maxHeight: '600px',
                   overflowY: 'auto',
                   paddingRight: '10px',
                 }}>
