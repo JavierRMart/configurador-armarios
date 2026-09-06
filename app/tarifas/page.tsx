@@ -9,6 +9,7 @@ import {
   updatePriceListState,
   addPriceListItems,
   deleteAllItems,
+  updateDescuento,
 } from '@/lib/price-lists';
 
 const PAGINAS_POR_BLOQUE = 3;
@@ -26,6 +27,10 @@ export default function TarifasPage() {
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
   const [error, setError] = useState('');
   const [resumen, setResumen] = useState<any>(null);
+
+  const [editandoDescuento, setEditandoDescuento] = useState<string | null>(null);
+  const [descuentoTemp, setDescuentoTemp] = useState('');
+  const [guardandoDescuento, setGuardandoDescuento] = useState(false);
 
   useEffect(() => {
     const cargar = async () => {
@@ -85,6 +90,33 @@ export default function TarifasPage() {
       setTarifas(tarifas.filter((t) => t.id !== tarifaId));
     } catch (err: any) {
       setError('No se pudo eliminar: ' + (err.message || err));
+    }
+  };
+
+  const iniciarEdicionDescuento = (tarifa: any) => {
+    setEditandoDescuento(tarifa.id);
+    setDescuentoTemp(String(tarifa.descuento_porcentaje ?? 15));
+  };
+
+  const guardarDescuento = async (tarifaId: string) => {
+    const valor = Number(descuentoTemp.replace(',', '.'));
+
+    if (isNaN(valor) || valor < 0 || valor > 100) {
+      alert('El descuento debe ser un número entre 0 y 100.');
+      return;
+    }
+
+    setGuardandoDescuento(true);
+    try {
+      await updateDescuento(tarifaId, valor);
+      setTarifas(
+        tarifas.map((t) => (t.id === tarifaId ? { ...t, descuento_porcentaje: valor } : t))
+      );
+      setEditandoDescuento(null);
+    } catch (err: any) {
+      alert('No se pudo guardar el descuento: ' + (err.message || err));
+    } finally {
+      setGuardandoDescuento(false);
     }
   };
 
@@ -440,7 +472,7 @@ export default function TarifasPage() {
                   padding: '15px',
                   borderBottom: '1px solid #d9cdb8',
                   display: 'grid',
-                  gridTemplateColumns: '200px 1fr 160px 130px 110px',
+                  gridTemplateColumns: '200px 1fr 130px 160px 130px 110px',
                   gap: '15px',
                   alignItems: 'center',
                 }}>
@@ -456,6 +488,58 @@ export default function TarifasPage() {
                     <p style={{ margin: 0, fontSize: '12px', color: '#6b5d4f' }}>
                       Vigente desde: {new Date(tarifa.vigente_desde).toLocaleDateString('es-ES')}
                     </p>
+                  </div>
+                  <div>
+                    {editandoDescuento === tarifa.id ? (
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          value={descuentoTemp}
+                          onChange={(e) => setDescuentoTemp(e.target.value)}
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') guardarDescuento(tarifa.id);
+                            if (e.key === 'Escape') setEditandoDescuento(null);
+                          }}
+                          style={{
+                            width: '50px',
+                            padding: '4px 6px',
+                            fontSize: '12px',
+                            border: '1px solid #b08d57',
+                            borderRadius: '4px',
+                          }}
+                        />
+                        <span style={{ fontSize: '12px', color: '#6b5d4f' }}>%</span>
+                        <button
+                          onClick={() => guardarDescuento(tarifa.id)}
+                          disabled={guardandoDescuento}
+                          style={{
+                            padding: '4px 8px',
+                            fontSize: '11px',
+                            background: '#27ae60',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          ✓
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => iniciarEdicionDescuento(tarifa)}
+                        style={{
+                          fontSize: '12px',
+                          color: '#1a1612',
+                          cursor: 'pointer',
+                          textDecoration: 'underline dotted',
+                        }}
+                        title="Pulsa para cambiar el descuento"
+                      >
+                        Descuento: <strong>{tarifa.descuento_porcentaje ?? 15}%</strong>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <span style={{

@@ -134,3 +134,28 @@ export async function getModelosDisponibles() {
 
   return Array.from(modelos).sort();
 }
+
+// Busca el precio de tarifa para una puerta CIEGA en formato BLOCK.
+// Devuelve null si no hay ninguna fila que coincida.
+export async function getPrecioPuertaCiega(modelo: string) {
+  if (!modelo) return null;
+
+  const { data, error } = await supabase
+    .from('price_list_items')
+    .select('precio, descripcion')
+    .contains('atributos', { modelo, tipo: 'CIEGA', formato: 'BLOCK' })
+    .limit(1);
+
+  if (error) throw error;
+  return data && data.length > 0 ? data[0] : null;
+}
+
+// Actualiza el descuento habitual de una tarifa
+export async function updateDescuento(priceListId: string, descuento: number) {
+  const { error } = await supabase
+    .from('price_lists')
+    .update({ descuento_porcentaje: descuento })
+    .eq('id', priceListId);
+
+  if (error) throw error;
+}

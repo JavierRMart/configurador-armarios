@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getModelosDisponibles } from '@/lib/price-lists';
+import { getModelosDisponibles, getPrecioPuertaCiega } from '@/lib/price-lists';
 
 const ALTOS = [2030, 2100, 2400];
 const ANCHOS = [625, 725, 825, 925];
@@ -15,6 +15,9 @@ export default function DoorEditor({ puerta, onChange }: any) {
   const [modelos, setModelos] = useState<string[]>([]);
   const [cargandoModelos, setCargandoModelos] = useState(true);
   const [errorModelos, setErrorModelos] = useState('');
+
+  const [precioInfo, setPrecioInfo] = useState<{ precio: number; descripcion: string } | null>(null);
+  const [cargandoPrecio, setCargandoPrecio] = useState(false);
 
   // Carga los modelos de la tarifa al abrir el editor
   useEffect(() => {
@@ -31,6 +34,31 @@ export default function DoorEditor({ puerta, onChange }: any) {
     cargar();
   }, []);
 
+  // Solo sabemos calcular precio para CIEGA + BATIENTE por ahora.
+  // Vidriera y corredera necesitan decisiones pendientes con tu padre.
+  useEffect(() => {
+    const esCasoSoportado = puerta.tipo === 'CIEGA' && puerta.subtipo === 'BATIENTE';
+    if (!esCasoSoportado || !puerta.modelo) {
+      setPrecioInfo(null);
+      return;
+    }
+
+    let cancelado = false;
+    setCargandoPrecio(true);
+    getPrecioPuertaCiega(puerta.modelo)
+      .then((resultado) => {
+        if (!cancelado) setPrecioInfo(resultado);
+      })
+      .catch(() => {
+        if (!cancelado) setPrecioInfo(null);
+      })
+      .finally(() => {
+        if (!cancelado) setCargandoPrecio(false);
+      });
+
+    return () => { cancelado = true; };
+  }, [puerta.modelo, puerta.tipo, puerta.subtipo]);
+
   const update = (field: string, value: any) => {
     onChange({ ...puerta, [field]: value });
   };
@@ -45,6 +73,8 @@ export default function DoorEditor({ puerta, onChange }: any) {
     modeloActual && !modelos.includes(modeloActual)
       ? [modeloActual, ...modelos]
       : modelos;
+
+  const esCasoSoportado = puerta.tipo === 'CIEGA' && puerta.subtipo === 'BATIENTE';
 
   const labelStyle: any = {
     fontSize: '11px',
@@ -114,6 +144,34 @@ export default function DoorEditor({ puerta, onChange }: any) {
           />
         </div>
       </div>
+
+      {/* PRECIO ESTIMADO — solo caso CIEGA + BATIENTE por ahora */}
+      {puerta.modelo && (
+        <div style={{
+          background: '#f5f1e8',
+          border: '1px solid #d9cdb8',
+          borderRadius: '4px',
+          padding: '10px 12px',
+          marginBottom: '15px',
+          fontSize: '12px',
+        }}>
+          {!esCasoSoportado ? (
+            <span style={{ color: '#6b5d4f' }}>
+              Precio no disponible todavía para {puerta.tipo === 'VIDRIERA' ? 'vidrieras' : 'correderas'}
+              — falta definir cómo se calculan.
+            </span>
+          ) : cargandoPrecio ? (
+            <span style={{ color: '#6b5d4f' }}>Buscando precio...</span>
+          ) : precioInfo ? (
+            <span>
+              <strong>Precio de tarifa: {precioInfo.precio.toFixed(2)} €</strong>
+              <span style={{ color: '#6b5d4f' }}> (sin aplicar el 15% de descuento habitual)</span>
+            </span>
+          ) : (
+            <span style={{ color: '#c0392b' }}>No se encontró precio para este modelo.</span>
+          )}
+        </div>
+      )}
 
       {/* FILA 2: CERCO Y BURLETE */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>

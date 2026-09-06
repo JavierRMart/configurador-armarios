@@ -130,6 +130,12 @@ export default function ProjectsScreen() {
                     Abrir
                   </button>
                   <button
+                    onClick={() => router.push(`/presupuesto?proyecto=${project.id}`)}
+                    className="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 text-sm"
+                  >
+                    💰 Presupuesto
+                  </button>
+                  <button
                     onClick={() => {
                       setRenaming(project.id);
                       setNewName(project.nombre);
