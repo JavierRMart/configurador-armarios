@@ -221,3 +221,25 @@ export async function getModelosPorFamilia() {
 
   return porFamilia;
 }
+
+// Devuelve la URL pública de la imagen de vidriera de un modelo concreto.
+// Devuelve null si el modelo no tiene ninguna imagen asignada.
+export async function getImagenVidriera(modelo: string): Promise<string | null> {
+  if (!modelo) return null;
+
+  const { data, error } = await supabase
+    .from('price_list_items')
+    .select('imagen_vidriera')
+    .contains('atributos', { modelo })
+    .not('imagen_vidriera', 'is', null)
+    .limit(1);
+
+  if (error) throw error;
+  if (!data || data.length === 0 || !data[0].imagen_vidriera) return null;
+
+  const { data: urlData } = supabase.storage
+    .from('vidrieras')
+    .getPublicUrl(data[0].imagen_vidriera);
+
+  return urlData.publicUrl;
+}

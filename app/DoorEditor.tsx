@@ -5,6 +5,7 @@ import {
   getModelosPorFamilia,
   getPrecioPuertaCiega,
   getVidrierasDisponibles,
+  getImagenVidriera,
 } from '@/lib/price-lists';
 
 const ALTOS = [2030, 2100, 2400];
@@ -26,6 +27,9 @@ export default function DoorEditor({ puerta, onChange }: any) {
 
   const [vidrieras, setVidrieras] = useState<string[]>([]);
   const [cargandoVidrieras, setCargandoVidrieras] = useState(false);
+
+  const [imagenVidriera, setImagenVidriera] = useState<string | null>(null);
+  const [cargandoImagen, setCargandoImagen] = useState(false);
 
   // Carga los modelos agrupados por familia al abrir el editor
   useEffect(() => {
@@ -105,6 +109,30 @@ export default function DoorEditor({ puerta, onChange }: any) {
       })
       .finally(() => {
         if (!cancelado) setCargandoVidrieras(false);
+      });
+
+    return () => { cancelado = true; };
+  }, [puerta.tipo, puerta.modelo]);
+
+  // Cuando el tipo es VIDRIERA y hay modelo, carga la imagen de referencia
+  // con todas las variantes de cristal de ese modelo (sin precios).
+  useEffect(() => {
+    if (puerta.tipo !== 'VIDRIERA' || !puerta.modelo) {
+      setImagenVidriera(null);
+      return;
+    }
+
+    let cancelado = false;
+    setCargandoImagen(true);
+    getImagenVidriera(puerta.modelo)
+      .then((url) => {
+        if (!cancelado) setImagenVidriera(url);
+      })
+      .catch(() => {
+        if (!cancelado) setImagenVidriera(null);
+      })
+      .finally(() => {
+        if (!cancelado) setCargandoImagen(false);
       });
 
     return () => { cancelado = true; };
@@ -307,6 +335,35 @@ export default function DoorEditor({ puerta, onChange }: any) {
           )}
         </div>
       </div>
+
+      {/* Imagen de referencia de vidriera — sin precios, solo para saber qué instalar */}
+      {puerta.tipo === 'VIDRIERA' && puerta.modelo && (
+        <div style={{ marginBottom: '15px' }}>
+          {cargandoImagen ? (
+            <p style={{ color: '#6b5d4f', fontSize: '12px' }}>Cargando imagen de referencia...</p>
+          ) : imagenVidriera ? (
+            <div style={{
+              border: '1px solid #d9cdb8',
+              borderRadius: '4px',
+              padding: '10px',
+              background: 'white',
+            }}>
+              <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#6b5d4f', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                Diseños disponibles para este modelo
+              </p>
+              <img
+                src={imagenVidriera}
+                alt={`Variantes de vidriera para ${puerta.modelo}`}
+                style={{ maxWidth: '100%', height: 'auto', display: 'block' }}
+              />
+            </div>
+          ) : (
+            <p style={{ color: '#6b5d4f', fontSize: '11px' }}>
+              No hay imagen de referencia para este modelo.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Instalación de la vidriera — solo aparece cuando el tipo es VIDRIERA */}
       {puerta.tipo === 'VIDRIERA' && (
