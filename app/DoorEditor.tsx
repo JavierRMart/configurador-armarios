@@ -54,10 +54,19 @@ export default function DoorEditor({ puerta, onChange }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Solo sabemos calcular precio para CIEGA + BATIENTE por ahora.
+  // Solo sabemos calcular precio para BATIENTE por ahora (Ciega o Vidriera).
   useEffect(() => {
-    const esCasoSoportado = puerta.tipo === 'CIEGA' && puerta.subtipo === 'BATIENTE';
+    const instalacion = puerta.tipo === 'CIEGA' ? puerta.subtipo : puerta.instalacionVidriera;
+    const esCasoSoportado = instalacion === 'BATIENTE';
     if (!esCasoSoportado || !puerta.modelo) {
+      setPrecioInfo(null);
+      return;
+    }
+
+    // Por ahora solo calculamos precio real para CIEGA + BATIENTE.
+    // Vidriera + Batiente se calculará en el motor de presupuestos (lib/presupuestos.ts),
+    // aquí solo mostramos el precio de Ciega como referencia rápida en el editor.
+    if (puerta.tipo !== 'CIEGA') {
       setPrecioInfo(null);
       return;
     }
@@ -76,7 +85,7 @@ export default function DoorEditor({ puerta, onChange }: any) {
       });
 
     return () => { cancelado = true; };
-  }, [puerta.modelo, puerta.tipo, puerta.subtipo]);
+  }, [puerta.modelo, puerta.tipo, puerta.subtipo, puerta.instalacionVidriera]);
 
   // Cuando el tipo es VIDRIERA, carga las vidrieras reales de ese modelo
   useEffect(() => {
@@ -105,8 +114,10 @@ export default function DoorEditor({ puerta, onChange }: any) {
     onChange({ ...puerta, [field]: value });
   };
 
+  const instalacionActual = puerta.tipo === 'CIEGA' ? puerta.subtipo : (puerta.instalacionVidriera || '');
+
   const cercosDisponibles =
-    puerta.subtipo === 'CORREDERA' ? CERCOS_CORREDERA : CERCOS_BATIENTE;
+    instalacionActual === 'CORREDERA' ? CERCOS_CORREDERA : CERCOS_BATIENTE;
 
   const familias = Object.keys(porFamilia).sort();
   const modelosDeFamilia = familiaSeleccionada ? porFamilia[familiaSeleccionada] || [] : [];
@@ -245,7 +256,7 @@ export default function DoorEditor({ puerta, onChange }: any) {
             onChange={(e) => {
               const nuevoTipo = e.target.value;
               const nuevoSubtipo = nuevoTipo === 'CIEGA' ? 'BATIENTE' : '';
-              onChange({ ...puerta, tipo: nuevoTipo, subtipo: nuevoSubtipo });
+              onChange({ ...puerta, tipo: nuevoTipo, subtipo: nuevoSubtipo, instalacionVidriera: '' });
             }}
             style={inputStyle}
           >
@@ -297,7 +308,23 @@ export default function DoorEditor({ puerta, onChange }: any) {
         </div>
       </div>
 
-      {/* Precio estimado — solo caso CIEGA + BATIENTE por ahora */}
+      {/* Instalación de la vidriera — solo aparece cuando el tipo es VIDRIERA */}
+      {puerta.tipo === 'VIDRIERA' && (
+        <div style={{ marginBottom: '15px' }}>
+          <label style={labelStyle}>Instalación</label>
+          <select
+            value={puerta.instalacionVidriera || ''}
+            onChange={(e) => update('instalacionVidriera', e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">— Selecciona —</option>
+            <option value="BATIENTE">Batiente</option>
+            <option value="CORREDERA">Corredera</option>
+          </select>
+        </div>
+      )}
+
+      {/* Precio estimado */}
       {puerta.modelo && (
         <div style={{
           background: '#f5f1e8',
@@ -307,20 +334,25 @@ export default function DoorEditor({ puerta, onChange }: any) {
           marginBottom: '15px',
           fontSize: '12px',
         }}>
-          {!esCasoSoportado ? (
-            <span style={{ color: '#6b5d4f' }}>
-              Precio no disponible todavía para {puerta.tipo === 'VIDRIERA' ? 'vidrieras' : 'correderas'}
-              — falta definir cómo se calculan.
-            </span>
-          ) : cargandoPrecio ? (
-            <span style={{ color: '#6b5d4f' }}>Buscando precio...</span>
-          ) : precioInfo ? (
-            <span>
-              <strong>Precio de tarifa: {precioInfo.precio.toFixed(2)} €</strong>
-              <span style={{ color: '#6b5d4f' }}> (sin aplicar el 15% de descuento habitual)</span>
-            </span>
+          {puerta.tipo === 'CIEGA' ? (
+            !esCasoSoportado ? (
+              <span style={{ color: '#6b5d4f' }}>
+                Precio no disponible todavía para correderas — falta definir cómo se calculan.
+              </span>
+            ) : cargandoPrecio ? (
+              <span style={{ color: '#6b5d4f' }}>Buscando precio...</span>
+            ) : precioInfo ? (
+              <span>
+                <strong>Precio de tarifa: {precioInfo.precio.toFixed(2)} €</strong>
+                <span style={{ color: '#6b5d4f' }}> (sin aplicar el 15% de descuento habitual)</span>
+              </span>
+            ) : (
+              <span style={{ color: '#c0392b' }}>No se encontró precio para este modelo.</span>
+            )
           ) : (
-            <span style={{ color: '#c0392b' }}>No se encontró precio para este modelo.</span>
+            <span style={{ color: '#6b5d4f' }}>
+              El precio de esta vidriera se calculará en la pantalla de presupuesto.
+            </span>
           )}
         </div>
       )}

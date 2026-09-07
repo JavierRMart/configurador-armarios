@@ -161,7 +161,9 @@ export async function updateDescuento(priceListId: string, descuento: number) {
 }
 
 // Devuelve los tipos de vidriera disponibles para un modelo concreto.
-// Son todos los "tipo" de ese modelo excepto CIEGA (que no es vidriera).
+// Son todos los "tipo" de ese modelo excepto CIEGA (no es vidriera) y los
+// tipos de armario (ABATIBLE, CORRED.) que quedaron mezclados en el mismo
+// campo "tipo" al extraer la tarifa, aunque no vendáis armarios de Imalasa.
 export async function getVidrierasDisponibles(modelo: string) {
   if (!modelo) return [];
 
@@ -175,8 +177,13 @@ export async function getVidrierasDisponibles(modelo: string) {
   const vidrieras = new Set<string>();
   for (const item of data || []) {
     const tipo = item.atributos?.tipo;
-    // Excluye lo que no es vidriera: la puerta ciega y componentes sueltos
-    if (tipo && tipo !== 'CIEGA' && !tipo.includes('CARPELINO')) {
+    if (
+      tipo &&
+      tipo !== 'CIEGA' &&
+      !tipo.includes('CARPELINO') &&
+      !tipo.startsWith('ABATIBLE') &&
+      !tipo.startsWith('CORRED.')
+    ) {
       vidrieras.add(tipo);
     }
   }

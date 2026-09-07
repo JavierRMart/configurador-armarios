@@ -4,15 +4,22 @@ import { getMargenPorCategoria } from './margenes';
 // Traduce una puerta del configurador al vocabulario de la tarifa de Imalasa.
 // Devuelve null si esa combinación todavía no está soportada.
 //
-// Por qué solo CIEGA+BATIENTE:
-// - El configurador dice "V-1, V-2, V-3, V-4". Imalasa dice "V1L, V1C" juntas
-//   y "V3, V4" juntas, y no tiene V-2. Falta decidir cómo se traduce eso.
-// - CORREDERA no es un precio suelto: es una receta de varias piezas
-//   (casonetto, herraje, tapetas, canal inferior) que aún no está definida.
+// CIEGA + BATIENTE -> CIEGA / BLOCK
+// VIDRIERA + BATIENTE -> el tipo real de Imalasa guardado en "subtipo"
+//   (ej. "V1L, V1C" o "Parrilla Enrasada V3, V4") / BLOCK
+//
+// CORREDERA (ciega o vidriera) sigue sin soportarse: no es un precio suelto,
+// es una receta de varias piezas (casonetto, herraje, tapetas, canal
+// inferior) que aún no está definida con el proveedor.
 function mapearATarifa(puerta: any): { tipo: string; formato: string } | null {
   if (puerta.tipo === 'CIEGA' && puerta.subtipo === 'BATIENTE') {
     return { tipo: 'CIEGA', formato: 'BLOCK' };
   }
+
+  if (puerta.tipo === 'VIDRIERA' && puerta.instalacionVidriera === 'BATIENTE' && puerta.subtipo) {
+    return { tipo: puerta.subtipo, formato: 'BLOCK' };
+  }
+
   return null;
 }
 
@@ -62,10 +69,14 @@ export async function calcularPrecioPuerta(puerta: any): Promise<LineaPresupuest
 
   const mapeo = mapearATarifa(puerta);
   if (!mapeo) {
-    return {
-      ...base,
-      motivo: `Todavía no se puede calcular ${puerta.tipo === 'VIDRIERA' ? 'vidrieras' : 'correderas'}.`,
-    };
+    const instalacion = puerta.tipo === 'CIEGA' ? puerta.subtipo : puerta.instalacionVidriera;
+    const motivo =
+      instalacion === 'CORREDERA'
+        ? 'Todavía no se puede calcular correderas.'
+        : puerta.tipo === 'VIDRIERA'
+        ? 'Falta elegir el tipo de vidriera o la instalación.'
+        : 'Todavía no se puede calcular este caso.';
+    return { ...base, motivo };
   }
 
   const { data, error } = await supabase
