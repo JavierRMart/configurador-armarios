@@ -47,7 +47,13 @@ export type LineaPresupuesto = {
 // Calcula el precio de UNA puerta:
 // precio de tarifa -> menos el descuento del proveedor -> más el margen
 // de la familia (puerta/armario) -> precio unitario al cliente.
-export async function calcularPrecioPuerta(puerta: any): Promise<LineaPresupuesto> {
+//
+// margenOverride, si se pasa, sustituye al margen guardado en
+// margenes_familia solo para este cálculo (no se guarda en ningún sitio).
+export async function calcularPrecioPuerta(
+  puerta: any,
+  margenOverride?: number
+): Promise<LineaPresupuesto> {
   const base: LineaPresupuesto = {
     puertaId: puerta.id,
     ubicacion: puerta.ubicacion || '(sin ubicación)',
@@ -106,8 +112,10 @@ export async function calcularPrecioPuerta(puerta: any): Promise<LineaPresupuest
   const descuentoPorcentaje = tarifaData?.descuento_porcentaje ?? 0;
   const costeTrasDescuento = precioTarifa * (1 - descuentoPorcentaje / 100);
 
-  // Margen de la familia de producto (lo que tu padre añade para vender)
-  const margenPorcentaje = await getMargenPorCategoria('puerta');
+  // Margen de la familia de producto (lo que tu padre añade para vender),
+  // salvo que se haya pasado uno propio para este cálculo puntual.
+  const margenPorcentaje =
+    margenOverride !== undefined ? margenOverride : await getMargenPorCategoria('puerta');
   const precioUnitario = costeTrasDescuento * (1 + margenPorcentaje / 100);
 
   const subtotal = precioUnitario * base.unidades;
@@ -125,7 +133,10 @@ export async function calcularPrecioPuerta(puerta: any): Promise<LineaPresupuest
 
 export type ResumenPresupuesto = {
   lineas: LineaPresupuesto[];
-  subtotalSinIva: number;
+  subtotalSinDescuentoCliente: number;
+  descuentoClientePorcentaje: number;
+  descuentoClienteImporte: number;
+  baseImponible: number;
   ivaPorcentaje: number;
   cantidadIva: number;
   totalConIva: number;
@@ -133,23 +144,44 @@ export type ResumenPresupuesto = {
   cantidadNoSoportadas: number;
 };
 
+export type OpcionesPresupuesto = {
+  // Sustituye al margen guardado en margenes_familia, solo para este cálculo.
+  margenOverride?: number;
+  // Descuento comercial al cliente final (pronto pago, cierre de venta...),
+  // independiente del descuento de proveedor ya aplicado en cada línea.
+  // Se aplica sobre la suma de líneas, antes del IVA.
+  descuentoClientePorcentaje?: number;
+};
+
 const IVA_PORCENTAJE = 21;
 
 // Calcula el presupuesto de TODAS las puertas de un proyecto, con el
-// desglose de IVA que va en el documento final.
-export async function calcularPresupuestoProyecto(puertas: any[]): Promise<ResumenPresupuesto> {
-  const lineas = await Promise.all(puertas.map((p) => calcularPrecioPuerta(p)));
+// desglose de descuento al cliente e IVA que va en el documento final.
+export async function calcularPresupuestoProyecto(
+  puertas: any[],
+  opciones?: OpcionesPresupuesto
+): Promise<ResumenPresupuesto> {
+  const lineas = await Promise.all(
+    puertas.map((p) => calcularPrecioPuerta(p, opciones?.margenOverride))
+  );
 
-  const subtotalSinIva = lineas.reduce((suma, l) => suma + (l.subtotal || 0), 0);
-  const cantidadIva = subtotalSinIva * (IVA_PORCENTAJE / 100);
-  const totalConIva = subtotalSinIva + cantidadIva;
+  const subtotalSinDescuentoCliente = lineas.reduce((suma, l) => suma + (l.subtotal || 0), 0);
+  const descuentoClientePorcentaje = opciones?.descuentoClientePorcentaje || 0;
+  const descuentoClienteImporte = subtotalSinDescuentoCliente * (descuentoClientePorcentaje / 100);
+  const baseImponible = subtotalSinDescuentoCliente - descuentoClienteImporte;
+
+  const cantidadIva = baseImponible * (IVA_PORCENTAJE / 100);
+  const totalConIva = baseImponible + cantidadIva;
 
   const cantidadSoportadas = lineas.filter((l) => l.soportado).length;
   const cantidadNoSoportadas = lineas.length - cantidadSoportadas;
 
   return {
     lineas,
-    subtotalSinIva,
+    subtotalSinDescuentoCliente,
+    descuentoClientePorcentaje,
+    descuentoClienteImporte,
+    baseImponible,
     ivaPorcentaje: IVA_PORCENTAJE,
     cantidadIva,
     totalConIva,

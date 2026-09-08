@@ -40,6 +40,24 @@ function paginaPresupuesto(
   projectData: any,
   resumen: ResumenPresupuesto
 ): string {
+  const DIAS_VALIDEZ = 30;
+  const fechaEmision = new Date();
+  const fechaValidez = new Date(fechaEmision);
+  fechaValidez.setDate(fechaValidez.getDate() + DIAS_VALIDEZ);
+
+  const fechaEmisionStr = fechaEmision.toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+  const fechaValidezStr = fechaValidez.toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const contactoDestacado = [empresa.telefono, empresa.email].filter(Boolean).join('  ·  ');
+
   const filasSoportadas = resumen.lineas.filter((l) => l.soportado);
   const filasPendientes = resumen.lineas.filter((l) => !l.soportado);
 
@@ -79,7 +97,7 @@ function paginaPresupuesto(
   ` : '';
 
   return `
-    <div style="width:210mm; height:297mm; background:white; position:relative;
+    <div style="width:210mm; background:white; position:relative;
                 box-sizing:border-box; padding:20mm 18mm; font-family:${SANS};">
 
       <!-- Cabecera: empresa y número de presupuesto -->
@@ -88,6 +106,10 @@ function paginaPresupuesto(
         <div>
           <div style="font-family:${SERIF}; font-size:20px; color:${C.tinta}; font-weight:bold;">
             ${empresa.nombre_sociedad || '(nombre de la empresa sin definir)'}
+          </div>
+          <div style="font-family:${SANS}; font-size:8px; color:${C.oro}; font-weight:bold;
+                      letter-spacing:0.5px; text-transform:uppercase; margin-top:1mm;">
+            Distribuidor oficial Imalasa
           </div>
           <div style="font-family:${SANS}; font-size:9px; color:${C.humo}; margin-top:2mm; line-height:1.5;">
             ${empresa.direccion ? `${empresa.direccion}<br/>` : ''}
@@ -103,7 +125,11 @@ function paginaPresupuesto(
             Nº ${numero}
           </div>
           <div style="font-family:${SANS}; font-size:9px; color:${C.humo}; margin-top:1mm;">
-            ${new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+            ${fechaEmisionStr}
+          </div>
+          <div style="font-family:${SANS}; font-size:9px; color:${C.tinta}; font-weight:bold;
+                      background:${C.arena}; padding:1.5mm 3mm; border-radius:1mm; margin-top:2mm; display:inline-block;">
+            Válido hasta el ${fechaValidezStr}
           </div>
         </div>
       </div>
@@ -148,13 +174,32 @@ function paginaPresupuesto(
 
       ${pendientesHtml}
 
+      <!-- Plazo de fabricación -->
+      <div style="margin-top:5mm; padding:3mm 4mm; border-left:1mm solid ${C.oro}; background:${C.crema};">
+        <div style="font-family:${SANS}; font-size:9px; color:${C.humo}; line-height:1.4;">
+          Los plazos de fabricación varían según la carga de producción del fabricante — confirma cuanto antes para reservar tu turno.
+        </div>
+      </div>
+
       <!-- Totales -->
       <div style="margin-top:10mm; display:flex; justify-content:flex-end;">
         <div style="width:80mm;">
           <div style="display:flex; justify-content:space-between; padding:2mm 0;
                       font-family:${SANS}; font-size:11px; color:${C.humo};">
+            <span>Subtotal</span>
+            <span>${formatoEuro(resumen.subtotalSinDescuentoCliente)}</span>
+          </div>
+          ${resumen.descuentoClientePorcentaje > 0 ? `
+          <div style="display:flex; justify-content:space-between; padding:2mm 0;
+                      font-family:${SANS}; font-size:11px; color:${C.humo};">
+            <span>Descuento cliente (${resumen.descuentoClientePorcentaje}%)</span>
+            <span>-${formatoEuro(resumen.descuentoClienteImporte)}</span>
+          </div>
+          ` : ''}
+          <div style="display:flex; justify-content:space-between; padding:2mm 0;
+                      font-family:${SANS}; font-size:11px; color:${C.humo};">
             <span>Base imponible</span>
-            <span>${formatoEuro(resumen.subtotalSinIva)}</span>
+            <span>${formatoEuro(resumen.baseImponible)}</span>
           </div>
           <div style="display:flex; justify-content:space-between; padding:2mm 0;
                       font-family:${SANS}; font-size:11px; color:${C.humo};
@@ -170,11 +215,45 @@ function paginaPresupuesto(
         </div>
       </div>
 
-      <!-- Pie -->
-      <div style="position:absolute; bottom:15mm; left:18mm; right:18mm;
-                  padding-top:3mm; border-top:0.3mm solid ${C.linea};
-                  font-family:${SANS}; font-size:8px; color:${C.humo}; text-align:center;">
-        Presupuesto válido durante 30 días desde la fecha de emisión. Precios sujetos a confirmación de existencias.
+      <!-- Forma de pago -->
+      <div style="margin-top:6mm; padding:4mm 5mm; background:${C.crema}; border:0.3mm solid ${C.linea}; border-radius:2mm;">
+        <div style="font-family:${SANS}; font-size:9px; font-weight:bold; color:${C.tinta};
+                    text-transform:uppercase; letter-spacing:1px; margin-bottom:2mm;">
+          Forma de pago
+        </div>
+        <div style="font-family:${SANS}; font-size:10px; color:${C.humo}; margin-bottom:3mm; line-height:1.4;">
+          Pago en tres fases, sin adelantar el importe completo:
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <div style="flex:1; text-align:center;">
+            <div style="font-family:${SERIF}; font-size:18px; font-weight:bold; color:${C.oro};">50%</div>
+            <div style="font-family:${SANS}; font-size:8px; color:${C.humo}; margin-top:1mm;">Al inicio de la obra</div>
+          </div>
+          <div style="flex:1; text-align:center; border-left:0.3mm solid ${C.linea}; border-right:0.3mm solid ${C.linea};">
+            <div style="font-family:${SERIF}; font-size:18px; font-weight:bold; color:${C.oro};">40%</div>
+            <div style="font-family:${SANS}; font-size:8px; color:${C.humo}; margin-top:1mm;">A la entrega del material</div>
+          </div>
+          <div style="flex:1; text-align:center;">
+            <div style="font-family:${SERIF}; font-size:18px; font-weight:bold; color:${C.oro};">10%</div>
+            <div style="font-family:${SANS}; font-size:8px; color:${C.humo}; margin-top:1mm;">Al finalizar el trabajo</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pie: llamada a la acción (en flujo normal, no fijo, para no solaparse
+           con "Forma de pago" cuando la tabla tiene muchas líneas) -->
+      <div style="margin-top:8mm; padding-top:4mm; border-top:0.5mm solid ${C.tinta}; text-align:center;">
+        <div style="font-family:${SERIF}; font-size:13px; color:${C.tinta}; font-weight:bold; margin-bottom:2mm;">
+          Para confirmar este presupuesto, contacta con nosotros
+        </div>
+        ${contactoDestacado ? `
+        <div style="font-family:${SANS}; font-size:11px; color:${C.oro}; font-weight:bold; margin-bottom:3mm;">
+          ${contactoDestacado}
+        </div>
+        ` : ''}
+        <div style="font-family:${SANS}; font-size:8px; color:${C.humo};">
+          Presupuesto válido durante ${DIAS_VALIDEZ} días desde la fecha de emisión. Precios sujetos a confirmación de existencias.
+        </div>
       </div>
     </div>
   `;
@@ -200,7 +279,6 @@ export default function ExportPresupuestoPDF({
     try {
       const numero = await reservarSiguienteNumero(proyectoId, resumen.totalConIva);
 
-      const doc = new jsPDF('p', 'mm', 'a4');
       const html = paginaPresupuesto(numero, empresa, projectData, resumen);
 
       const cont = document.createElement('div');
@@ -208,7 +286,6 @@ export default function ExportPresupuestoPDF({
       cont.style.left = '-10000px';
       cont.style.top = '0';
       cont.style.width = '210mm';
-      cont.style.height = '297mm';
       cont.style.backgroundColor = '#ffffff';
       cont.innerHTML = html;
       document.body.appendChild(cont);
@@ -221,7 +298,17 @@ export default function ExportPresupuestoPDF({
       });
       document.body.removeChild(cont);
 
-      doc.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      // La altura real del contenido puede superar (o quedarse corta de) una
+      // hoja A4 según cuántas líneas tenga el presupuesto: con el pie ya en
+      // flujo normal (no fijo), forzar siempre 297mm aquí recortaría o
+      // deformaría el contenido en vez de solaparlo. En su lugar, la página
+      // del PDF se genera con el ancho A4 pero el alto real del contenido,
+      // manteniendo la proporción exacta de lo renderizado.
+      const anchoMM = 210;
+      const altoMM = (canvas.height / canvas.width) * anchoMM;
+
+      const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: [anchoMM, altoMM] });
+      doc.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, anchoMM, altoMM, undefined, 'FAST');
       doc.save(`Presupuesto-${numero}-${nombreProyecto}.pdf`);
     } catch (error: any) {
       console.error('Error al generar el presupuesto:', error);

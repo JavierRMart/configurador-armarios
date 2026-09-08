@@ -16,8 +16,15 @@ export default function PresupuestoPage() {
   const [nombreProyecto, setNombreProyecto] = useState('');
   const [projectData, setProjectData] = useState<any>(null);
   const [empresa, setEmpresa] = useState<DatosEmpresa | null>(null);
+  const [puertas, setPuertas] = useState<any[]>([]);
   const [resumen, setResumen] = useState<ResumenPresupuesto | null>(null);
   const [error, setError] = useState('');
+
+  // Margen y descuento al cliente: editables al momento, no se guardan en ninguna tabla.
+  const [margen, setMargen] = useState('');
+  const [descuentoCliente, setDescuentoCliente] = useState('0');
+  const [errorAjustes, setErrorAjustes] = useState('');
+  const [recalculando, setRecalculando] = useState(false);
 
   useEffect(() => {
     const cargar = async () => {
@@ -43,20 +50,28 @@ export default function PresupuestoPage() {
         setNombreProyecto(proyecto.nombre);
         setProjectData(proyecto.config?.projectData || {});
 
-        const puertas = proyecto.config?.puertas || [];
-        if (puertas.length === 0) {
+        const puertasProyecto = proyecto.config?.puertas || [];
+        if (puertasProyecto.length === 0) {
           setError('Este proyecto no tiene puertas configuradas.');
           setLoading(false);
           return;
         }
+        setPuertas(puertasProyecto);
 
         const [resultado, datosEmpresa] = await Promise.all([
-          calcularPresupuestoProyecto(puertas),
+          calcularPresupuestoProyecto(puertasProyecto),
           getDatosEmpresa(),
         ]);
 
         setResumen(resultado);
         setEmpresa(datosEmpresa);
+
+        // Precarga el margen con el que salió del primer cálculo (el habitual
+        // de margenes_familia), para que el presupuestador vea de dónde parte.
+        const margenDeLinea = resultado.lineas.find(
+          (l) => l.soportado && l.margenPorcentaje !== undefined
+        )?.margenPorcentaje;
+        if (margenDeLinea !== undefined) setMargen(String(margenDeLinea));
       } catch (err: any) {
         setError('No se pudo calcular el presupuesto: ' + (err.message || err));
       } finally {
@@ -69,6 +84,35 @@ export default function PresupuestoPage() {
 
   const formatoEuro = (n: number) =>
     n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+
+  const handleRecalcular = async () => {
+    setErrorAjustes('');
+
+    const margenNum = Number(margen.replace(',', '.'));
+    const descuentoNum = Number(descuentoCliente.replace(',', '.'));
+
+    if (isNaN(margenNum) || margenNum < 0) {
+      setErrorAjustes('El margen debe ser un número mayor o igual a 0.');
+      return;
+    }
+    if (isNaN(descuentoNum) || descuentoNum < 0 || descuentoNum > 100) {
+      setErrorAjustes('El descuento al cliente debe ser un número entre 0 y 100.');
+      return;
+    }
+
+    setRecalculando(true);
+    try {
+      const resultado = await calcularPresupuestoProyecto(puertas, {
+        margenOverride: margenNum,
+        descuentoClientePorcentaje: descuentoNum,
+      });
+      setResumen(resultado);
+    } catch (err: any) {
+      setErrorAjustes('No se pudo recalcular: ' + (err.message || err));
+    } finally {
+      setRecalculando(false);
+    }
+  };
 
   if (loading) return <div style={{ padding: '20px' }}>Calculando presupuesto...</div>;
   if (!user) return <div style={{ padding: '20px' }}>Debes iniciar sesión</div>;
@@ -181,6 +225,62 @@ export default function PresupuestoPage() {
             <div style={{
               background: 'white',
               borderRadius: '8px',
+              border: '1px solid #d9cdb8',
+              padding: '20px',
+              marginBottom: '20px',
+            }}>
+              <h3 style={{ margin: '0 0 15px 0', fontSize: '13px', fontWeight: 'bold', color: '#1a1612' }}>
+                AJUSTES DEL PRESUPUESTO
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '15px', alignItems: 'end' }}>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+                    Margen (%)
+                  </label>
+                  <input
+                    type="text"
+                    value={margen}
+                    onChange={(e) => setMargen(e.target.value)}
+                    style={{ width: '100%', padding: '8px', fontSize: '13px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#6b5d4f', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+                    Descuento al cliente (%)
+                  </label>
+                  <input
+                    type="text"
+                    value={descuentoCliente}
+                    onChange={(e) => setDescuentoCliente(e.target.value)}
+                    style={{ width: '100%', padding: '8px', fontSize: '13px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <button
+                  onClick={handleRecalcular}
+                  disabled={recalculando}
+                  style={{
+                    background: '#b08d57',
+                    color: 'white',
+                    border: 'none',
+                    padding: '10px 20px',
+                    borderRadius: '4px',
+                    cursor: recalculando ? 'default' : 'pointer',
+                    fontWeight: 'bold',
+                    fontSize: '13px',
+                    opacity: recalculando ? 0.6 : 1,
+                  }}
+                >
+                  {recalculando ? 'Recalculando...' : 'Recalcular'}
+                </button>
+              </div>
+              {errorAjustes && (
+                <p style={{ color: '#c0392b', fontSize: '12px', margin: '10px 0 0 0' }}>{errorAjustes}</p>
+              )}
+            </div>
+
+            <div style={{
+              background: 'white',
+              borderRadius: '8px',
               border: '2px solid #b08d57',
               padding: '20px',
               marginBottom: '20px',
@@ -193,8 +293,18 @@ export default function PresupuestoPage() {
               )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#6b5d4f', marginBottom: '6px' }}>
+                <span>Subtotal</span>
+                <span>{formatoEuro(resumen.subtotalSinDescuentoCliente)}</span>
+              </div>
+              {resumen.descuentoClientePorcentaje > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#c0392b', marginBottom: '6px' }}>
+                  <span>Descuento cliente ({resumen.descuentoClientePorcentaje}%)</span>
+                  <span>-{formatoEuro(resumen.descuentoClienteImporte)}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#6b5d4f', marginBottom: '6px' }}>
                 <span>Base imponible</span>
-                <span>{formatoEuro(resumen.subtotalSinIva)}</span>
+                <span>{formatoEuro(resumen.baseImponible)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#6b5d4f', marginBottom: '12px' }}>
                 <span>IVA ({resumen.ivaPorcentaje}%)</span>
