@@ -41,3 +41,10 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# datos generados por herramientas/tarifas/ (se regeneran con los scripts)
+/items_bd.json
+/items_procesados.json
+/tablas_extraidas.json
+/TARIFA_IMALASA.pdf.pdf
+/vidrieras_recortadas/
