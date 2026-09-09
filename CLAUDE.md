@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # LVMeritus / ARVE — Configurador y Presupuestos
 
 ## Qué es esto
